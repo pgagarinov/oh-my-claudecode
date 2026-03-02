@@ -25,6 +25,7 @@ export { scientistAgent } from './scientist.js';
 export { exploreAgent } from './explore.js';
 
 export { documentSpecialistAgent } from './document-specialist.js';
+export { harshCriticAgent } from './harsh-critic.js';
 
 // Import base agents for use in getAgentDefinitions
 import { deepExecutorAgent } from './deep-executor.js';
@@ -39,6 +40,7 @@ import { qaTesterAgent } from './qa-tester.js';
 import { scientistAgent } from './scientist.js';
 import { exploreAgent } from './explore.js';
 import { documentSpecialistAgent } from './document-specialist.js';
+import { harshCriticAgent } from './harsh-critic.js';
 
 // Re-export loadAgentPrompt (also exported from index.ts)
 export { loadAgentPrompt };
@@ -236,6 +238,7 @@ export function getAgentDefinitions(overrides?: Partial<Record<string, Partial<A
     // COORDINATION
     // ============================================================
     critic: criticAgent,
+    'harsh-critic': harshCriticAgent,
 
     // ============================================================
     // BACKWARD COMPATIBILITY (Deprecated)
