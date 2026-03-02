@@ -145,6 +145,8 @@ async function waitFor(
 describe('watchdogCliWorkers dead-pane retry behavior', { timeout: 10000 }, () => {
   let cwd: string;
   let warnSpy: ReturnType<typeof vi.spyOn>;
+  let setIntervalSpy: ReturnType<typeof vi.spyOn>;
+  let clearIntervalSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
     vi.useRealTimers();
@@ -157,11 +159,26 @@ describe('watchdogCliWorkers dead-pane retry behavior', { timeout: 10000 }, () =
     tmuxMocks.spawnWorkerInPane.mockResolvedValue(undefined);
     tmuxMocks.sendToWorker.mockResolvedValue(true);
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation(
+      ((handler: TimerHandler, _timeout?: number, ...args: unknown[]) => {
+        void Promise.resolve().then(async () => {
+          if (typeof handler === 'function') {
+            await handler(...args);
+          }
+        });
+        return 1 as unknown as ReturnType<typeof setInterval>;
+      }) as typeof setInterval
+    );
+    clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval').mockImplementation(
+      (() => undefined) as typeof clearInterval
+    );
     ({ watchdogCliWorkers } = await import('../runtime.js'));
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    setIntervalSpy.mockRestore();
+    clearIntervalSpy.mockRestore();
     warnSpy.mockRestore();
     rmSync(cwd, { recursive: true, force: true });
   });
