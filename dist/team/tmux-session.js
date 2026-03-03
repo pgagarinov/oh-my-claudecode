@@ -6,7 +6,7 @@
  * Sessions are named "omc-team-{teamName}-{workerName}".
  */
 import { exec, execFile, execSync, execFileSync } from 'child_process';
-import { join, basename } from 'path';
+import { join, basename, isAbsolute, win32 } from 'path';
 import { promisify } from 'util';
 import fs from 'fs/promises';
 import { validateTeamName } from './team-name.js';
@@ -55,12 +55,23 @@ function assertSafeEnvKey(key) {
         throw new Error(`Invalid environment key: "${key}"`);
     }
 }
-function assertSafeLaunchBinary(binary) {
-    if (/^[A-Za-z0-9._/-]+$/.test(binary))
-        return;
-    if (/^[A-Za-z]:[\\/][A-Za-z0-9._\\/-]+$/.test(binary))
-        return;
-    throw new Error(`Invalid launchBinary: "${binary}"`);
+const DANGEROUS_LAUNCH_BINARY_CHARS = /[;&|`$()<>\n\r\t\0]/;
+function isAbsoluteLaunchBinaryPath(value) {
+    return isAbsolute(value) || win32.isAbsolute(value);
+}
+function assertSafeLaunchBinary(launchBinary) {
+    if (launchBinary.trim().length === 0) {
+        throw new Error('Invalid launchBinary: value cannot be empty');
+    }
+    if (launchBinary !== launchBinary.trim()) {
+        throw new Error('Invalid launchBinary: value cannot have leading/trailing whitespace');
+    }
+    if (DANGEROUS_LAUNCH_BINARY_CHARS.test(launchBinary)) {
+        throw new Error('Invalid launchBinary: contains dangerous shell metacharacters');
+    }
+    if (/\s/.test(launchBinary) && !isAbsoluteLaunchBinaryPath(launchBinary)) {
+        throw new Error('Invalid launchBinary: paths with spaces must be absolute');
+    }
 }
 function getLaunchWords(config) {
     if (config.launchBinary) {
@@ -75,6 +86,7 @@ function getLaunchWords(config) {
 export function buildWorkerStartCommand(config) {
     const shell = getDefaultShell();
     const launchWords = getLaunchWords(config);
+    const shouldSourceRc = process.env.OMC_TEAM_NO_RC !== '1';
     if (process.platform === 'win32' && !isUnixLikeOnWindows()) {
         const envPrefix = Object.entries(config.envVars)
             .map(([k, v]) => {
@@ -95,7 +107,7 @@ export function buildWorkerStartCommand(config) {
         });
         const shellName = shellNameFromPath(shell) || 'bash';
         const rcFile = process.env.HOME ? `${process.env.HOME}/.${shellName}rc` : '';
-        const script = rcFile
+        const script = shouldSourceRc && rcFile
             ? `[ -f ${shellEscape(rcFile)} ] && . ${shellEscape(rcFile)}; exec "$@"`
             : 'exec "$@"';
         return [
@@ -117,7 +129,7 @@ export function buildWorkerStartCommand(config) {
     const shellName = shellNameFromPath(shell) || 'bash';
     const rcFile = process.env.HOME ? `${process.env.HOME}/.${shellName}rc` : '';
     // Quote rcFile to prevent shell injection if HOME contains metacharacters
-    const sourceCmd = rcFile ? `[ -f "${rcFile}" ] && source "${rcFile}"; ` : '';
+    const sourceCmd = shouldSourceRc && rcFile ? `[ -f "${rcFile}" ] && source "${rcFile}"; ` : '';
     return `env ${envString} ${shell} -c "${sourceCmd}exec ${launchWords[0]}"`;
 }
 /** Validate tmux is available. Throws with install instructions if not. */
@@ -401,6 +413,26 @@ export function paneLooksReady(captured) {
         return true;
     const hasCodexHint = tail.some(line => /\bgpt-[\w.-]+\b/i.test(line) || /\b\d+% left\b/i.test(line));
     return hasCodexHint;
+}
+export async function waitForPaneReady(paneId, opts = {}) {
+    const envTimeout = Number.parseInt(process.env.OMC_SHELL_READY_TIMEOUT_MS ?? '', 10);
+    const timeoutMs = Number.isFinite(opts.timeoutMs) && (opts.timeoutMs ?? 0) > 0
+        ? Number(opts.timeoutMs)
+        : (Number.isFinite(envTimeout) && envTimeout > 0 ? envTimeout : 10_000);
+    const pollIntervalMs = Number.isFinite(opts.pollIntervalMs) && (opts.pollIntervalMs ?? 0) > 0
+        ? Number(opts.pollIntervalMs)
+        : 250;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const captured = await capturePaneAsync(paneId, promisifiedExecFile);
+        if (paneLooksReady(captured) && !paneHasActiveTask(captured)) {
+            return true;
+        }
+        await sleep(pollIntervalMs);
+    }
+    console.warn(`[tmux-session] waitForPaneReady: pane ${paneId} timed out after ${timeoutMs}ms ` +
+        `(set OMC_SHELL_READY_TIMEOUT_MS to tune)`);
+    return false;
 }
 function paneTailContainsLiteralLine(captured, text) {
     return normalizeTmuxCapture(captured).includes(normalizeTmuxCapture(text));

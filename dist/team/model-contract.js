@@ -216,13 +216,22 @@ export function validateCliAvailable(agentType) {
         throw new Error(`CLI agent '${agentType}' not found. ${contract.installInstructions}`);
     }
 }
+export function resolveValidatedBinaryPath(agentType) {
+    const contract = getContract(agentType);
+    return resolveCliBinaryPath(contract.binary);
+}
 export function buildLaunchArgs(agentType, config) {
     return getContract(agentType).buildLaunchArgs(config.model, config.extraFlags);
 }
 export function buildWorkerArgv(agentType, config) {
     validateTeamName(config.teamName);
     const contract = getContract(agentType);
-    const binary = resolveBinaryPath(contract.binary);
+    const binary = config.resolvedBinaryPath
+        ? (() => {
+            validateBinaryRef(config.resolvedBinaryPath);
+            return config.resolvedBinaryPath;
+        })()
+        : resolveBinaryPath(contract.binary);
     const args = buildLaunchArgs(agentType, config);
     return [binary, ...args];
 }

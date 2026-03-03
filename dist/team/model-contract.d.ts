@@ -16,6 +16,11 @@ export interface WorkerLaunchConfig {
     model?: string;
     cwd: string;
     extraFlags?: string[];
+    /**
+     * Optional pre-validated absolute CLI binary path.
+     * Used by runtime preflight validation to ensure spawns are pinned.
+     */
+    resolvedBinaryPath?: string;
 }
 /** @deprecated Backward-compat shim for older team API consumers. */
 export interface CliBinaryValidation {
@@ -40,6 +45,7 @@ export declare const _testInternals: {
 export declare function getContract(agentType: CliAgentType): CliAgentContract;
 export declare function isCliAvailable(agentType: CliAgentType): boolean;
 export declare function validateCliAvailable(agentType: CliAgentType): void;
+export declare function resolveValidatedBinaryPath(agentType: CliAgentType): string;
 export declare function buildLaunchArgs(agentType: CliAgentType, config: WorkerLaunchConfig): string[];
 export declare function buildWorkerArgv(agentType: CliAgentType, config: WorkerLaunchConfig): string[];
 export declare function buildWorkerCommand(agentType: CliAgentType, config: WorkerLaunchConfig): string;
