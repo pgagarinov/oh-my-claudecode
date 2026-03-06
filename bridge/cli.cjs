@@ -55671,14 +55671,13 @@ var import_promises2 = __toESM(require("fs/promises"), 1);
 var import_path24 = __toESM(require("path"), 1);
 
 // src/hooks/project-memory/constants.ts
-var MEMORY_FILE = "project-memory.json";
-var MEMORY_DIR = ".omc";
 var CACHE_EXPIRY_MS = 24 * 60 * 60 * 1e3;
 
 // src/hooks/project-memory/storage.ts
 init_atomic_write();
+init_worktree_paths();
 function getMemoryPath(projectRoot) {
-  return import_path24.default.join(projectRoot, MEMORY_DIR, MEMORY_FILE);
+  return getWorktreeProjectMemoryPath(projectRoot);
 }
 async function loadProjectMemory(projectRoot) {
   const memoryPath = getMemoryPath(projectRoot);
@@ -55694,8 +55693,8 @@ async function loadProjectMemory(projectRoot) {
   }
 }
 async function saveProjectMemory(projectRoot, memory) {
-  const omcDir = import_path24.default.join(projectRoot, MEMORY_DIR);
   const memoryPath = getMemoryPath(projectRoot);
+  const omcDir = import_path24.default.dirname(memoryPath);
   try {
     await import_promises2.default.mkdir(omcDir, { recursive: true });
     await atomicWriteJson(memoryPath, memory);
