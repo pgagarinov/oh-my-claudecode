@@ -7657,7 +7657,9 @@ function getOMCConfig() {
       notifications: config2.notifications,
       notificationProfiles: config2.notificationProfiles,
       hudEnabled: config2.hudEnabled,
-      autoUpgradePrompt: config2.autoUpgradePrompt
+      autoUpgradePrompt: config2.autoUpgradePrompt,
+      nodeBinary: config2.nodeBinary,
+      omcSetup: config2.omcSetup
     };
   } catch {
     return { silentAutoUpdate: false };
@@ -63531,7 +63533,11 @@ function checkConfigIssues() {
       "setupVersion",
       "stopHookCallbacks",
       "notifications",
-      "autoUpgradePrompt"
+      "autoUpgradePrompt",
+      "hudEnabled",
+      "nodeBinary",
+      "notificationProfiles",
+      "omcSetup"
     ]);
     for (const field of Object.keys(config2)) {
       if (!knownFields.has(field)) {

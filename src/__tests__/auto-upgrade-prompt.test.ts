@@ -99,4 +99,16 @@ describe('auto-upgrade prompt config', () => {
 
     expect(isAutoUpgradePromptEnabled()).toBe(true);
   });
+
+  it('preserves omcSetup.rtk preferences when loading config', () => {
+    mockedExistsSync.mockReturnValue(true);
+    mockedReadFileSync.mockReturnValue(JSON.stringify({
+      silentAutoUpdate: false,
+      omcSetup: {
+        rtk: false,
+      },
+    }));
+
+    expect(getOMCConfig().omcSetup).toEqual({ rtk: false });
+  });
 });
