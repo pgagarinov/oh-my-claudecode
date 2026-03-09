@@ -376,7 +376,7 @@ All installed skills are available as slash commands with the prefix `/oh-my-cla
 | `/oh-my-claudecode:ultrawork <task>`        | Maximum performance mode with parallel agents                                                 |
 | `/oh-my-claudecode:team <N>:<agent> <task>` | Coordinated native team workflow                                                              |
 | `/oh-my-claudecode:ralph-init <task>`       | Initialize PRD for structured task tracking                                                   |
-| `/oh-my-claudecode:ralph <task>`            | Self-referential loop until task completion                                                   |
+| `/oh-my-claudecode:ralph <task>`            | Self-referential loop until task completion (`--critic=architect|critic|codex`)               |
 | `/oh-my-claudecode:ultraqa <goal>`          | Autonomous QA cycling workflow                                                                |
 | `/oh-my-claudecode:omc-plan <description>`  | Start planning session (supports consensus structured deliberation)                           |
 | `/oh-my-claudecode:ralplan <description>`   | Iterative planning with consensus structured deliberation (`--deliberate` for high-risk mode) |
