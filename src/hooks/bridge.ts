@@ -27,7 +27,7 @@ import {
   getRunningTaskCount,
 } from "../hud/background-tasks.js";
 import { readHudState, writeHudState } from "../hud/state.js";
-import { loadConfig } from "../config/loader.js";
+import { compactOmcStartupGuidance, loadConfig } from "../config/loader.js";
 import { writeSkillActiveState } from "./skill-state/index.js";
 import {
   ULTRAWORK_MESSAGE,
@@ -936,7 +936,7 @@ Treat this as prior-session context only. Prioritize the user's newest request, 
   const agentsMdPath = join(directory, 'AGENTS.md');
   if (existsSync(agentsMdPath)) {
     try {
-      let agentsContent = readFileSync(agentsMdPath, 'utf-8').trim();
+      let agentsContent = compactOmcStartupGuidance(readFileSync(agentsMdPath, 'utf-8')).trim();
       if (agentsContent) {
         // Truncate to ~5000 tokens (20000 chars) to avoid context bloat
         const MAX_AGENTS_CHARS = 20000;

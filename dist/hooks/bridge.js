@@ -22,7 +22,7 @@ import { processOrchestratorPreTool, processOrchestratorPostTool } from "./omc-o
 import { normalizeHookInput } from "./bridge-normalize.js";
 import { addBackgroundTask, getRunningTaskCount, } from "../hud/background-tasks.js";
 import { readHudState, writeHudState } from "../hud/state.js";
-import { loadConfig } from "../config/loader.js";
+import { compactOmcStartupGuidance, loadConfig } from "../config/loader.js";
 import { writeSkillActiveState } from "./skill-state/index.js";
 import { ULTRAWORK_MESSAGE, ULTRATHINK_MESSAGE, SEARCH_MESSAGE, ANALYZE_MESSAGE, TDD_MESSAGE, CODE_REVIEW_MESSAGE, SECURITY_REVIEW_MESSAGE, RALPH_MESSAGE, PROMPT_TRANSLATION_MESSAGE, } from "../installer/hooks.js";
 // Agent dashboard is used in pre/post-tool-use hot path
@@ -700,7 +700,7 @@ Treat this as prior-session context only. Prioritize the user's newest request, 
     const agentsMdPath = join(directory, 'AGENTS.md');
     if (existsSync(agentsMdPath)) {
         try {
-            let agentsContent = readFileSync(agentsMdPath, 'utf-8').trim();
+            let agentsContent = compactOmcStartupGuidance(readFileSync(agentsMdPath, 'utf-8')).trim();
             if (agentsContent) {
                 // Truncate to ~5000 tokens (20000 chars) to avoid context bloat
                 const MAX_AGENTS_CHARS = 20000;
