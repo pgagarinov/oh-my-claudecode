@@ -244,4 +244,71 @@ describe('usage API stale data handling', () => {
     expect(result.rateLimits).toBeNull();
     expect(result.error).toBe('rate_limited');
   });
+
+  it('preserves last-known-good usage on transient network failures and marks it stale', async () => {
+    const lastSuccess = Date.now() - 5 * 60_000;
+    const expiredCache = JSON.stringify({
+      timestamp: Date.now() - 91_000,
+      source: 'zai',
+      lastSuccessAt: lastSuccess,
+      data: {
+        fiveHourPercent: 11,
+        fiveHourResetsAt: null,
+      },
+    });
+
+    const { files, fsModule } = createFsMock({ [CACHE_PATH]: expiredCache });
+    setupMocks(fsModule, 500, '');
+
+    const { getUsage } = await import('../../hud/usage-api.js');
+    const result = await getUsage();
+
+    expect(result).toEqual({
+      rateLimits: {
+        fiveHourPercent: 11,
+        fiveHourResetsAt: null,
+      },
+      error: 'network',
+      stale: true,
+    });
+
+    const written = JSON.parse(files.get(CACHE_PATH)!);
+    expect(written.data).toEqual({
+      fiveHourPercent: 11,
+      fiveHourResetsAt: null,
+    });
+    expect(written.error).toBe(true);
+    expect(written.errorReason).toBe('network');
+    expect(written.lastSuccessAt).toBe(lastSuccess);
+  });
+
+  it('does not preserve stale fallback data past the max stale window on transient failures', async () => {
+    const sixteenMinutesAgo = Date.now() - 16 * 60_000;
+    const expiredCache = JSON.stringify({
+      timestamp: Date.now() - 91_000,
+      source: 'zai',
+      lastSuccessAt: sixteenMinutesAgo,
+      data: {
+        fiveHourPercent: 11,
+        fiveHourResetsAt: null,
+      },
+    });
+
+    const { files, fsModule } = createFsMock({ [CACHE_PATH]: expiredCache });
+    setupMocks(fsModule, 500, '');
+
+    const { getUsage } = await import('../../hud/usage-api.js');
+    const result = await getUsage();
+
+    expect(result).toEqual({
+      rateLimits: null,
+      error: 'network',
+    });
+
+    const written = JSON.parse(files.get(CACHE_PATH)!);
+    expect(written.data).toBeNull();
+    expect(written.error).toBe(true);
+    expect(written.errorReason).toBe('network');
+    expect(written.lastSuccessAt).toBe(sixteenMinutesAgo);
+  });
 });
