@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateWorkerOverlay, getWorkerEnv } from '../worker-bootstrap.js';
+import { generateMailboxTriggerMessage, generateTriggerMessage, generateWorkerOverlay, getWorkerEnv } from '../worker-bootstrap.js';
 
 describe('worker-bootstrap', () => {
   const baseParams = {
@@ -13,6 +13,17 @@ describe('worker-bootstrap', () => {
   };
 
   describe('generateWorkerOverlay', () => {
+    it('uses urgent trigger wording that requires immediate work and concrete progress', () => {
+      expect(generateTriggerMessage('test-team', 'worker-1')).toContain('.omc/state/team/test-team/workers/worker-1/inbox.md');
+      expect(generateTriggerMessage('test-team', 'worker-1')).toContain('start work now');
+      expect(generateTriggerMessage('test-team', 'worker-1')).toContain('concrete progress');
+      expect(generateTriggerMessage('test-team', 'worker-1')).toContain('ACK-only');
+      expect(generateMailboxTriggerMessage('test-team', 'worker-1', 2)).toContain('.omc/state/team/test-team/mailbox/worker-1.json');
+      expect(generateMailboxTriggerMessage('test-team', 'worker-1', 2)).toContain('act now');
+      expect(generateMailboxTriggerMessage('test-team', 'worker-1', 2)).toContain('concrete progress');
+      expect(generateMailboxTriggerMessage('test-team', 'worker-1', 2)).toContain('ACK-only');
+    });
+
     it('includes sentinel file write instruction first', () => {
       const overlay = generateWorkerOverlay(baseParams);
       const sentinelIdx = overlay.indexOf('.ready');

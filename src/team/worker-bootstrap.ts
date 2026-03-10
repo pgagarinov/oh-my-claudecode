@@ -13,12 +13,12 @@ export interface WorkerBootstrapParams {
 }
 
 export function generateTriggerMessage(teamName: string, workerName: string): string {
-  return `Read and follow the instructions in .omc/state/team/${teamName}/workers/${workerName}/inbox.md`;
+  return `Read .omc/state/team/${teamName}/workers/${workerName}/inbox.md, start work now, then report concrete progress (not ACK-only).`;
 }
 
 export function generateMailboxTriggerMessage(teamName: string, workerName: string, count = 1): string {
   const normalizedCount = Number.isFinite(count) ? Math.max(1, Math.floor(count)) : 1;
-  return `You have ${normalizedCount} new message(s). Check .omc/state/team/${teamName}/mailbox/${workerName}.json`;
+  return `You have ${normalizedCount} new message(s). Check .omc/state/team/${teamName}/mailbox/${workerName}.json, act now, and reply with concrete progress (not ACK-only).`;
 }
 
 function agentTypeGuidance(agentType: CliAgentType): string {
