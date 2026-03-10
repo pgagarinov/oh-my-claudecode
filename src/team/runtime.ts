@@ -12,6 +12,7 @@ import {
 import {
   composeInitialInbox, ensureWorkerStateDir, writeWorkerOverlay, generateTriggerMessage,
 } from './worker-bootstrap.js';
+import { cleanupTeamWorktrees } from './git-worktree.js';
 import {
   withTaskLock,
   writeTaskFailure,
@@ -959,6 +960,11 @@ export async function shutdownTeam(
   await killTeamSession(sessionName, workerPaneIds, leaderPaneId, { sessionMode });
 
   // Clean up state
+  try {
+    cleanupTeamWorktrees(teamName, cwd);
+  } catch {
+    // best-effort: worktree cleanup is dormant in current runtime paths
+  }
   try {
     await rm(root, { recursive: true, force: true });
   } catch {
