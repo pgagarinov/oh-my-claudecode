@@ -176,6 +176,14 @@ describe('mode-state-io', () => {
             expect(result).toBe(true);
             expect(existsSync(legacyPath)).toBe(false);
         });
+        it('should clean up legacy root-level mode files for the matching session', () => {
+            const legacyRootPath = join(tempDir, '.omc', 'ralph-state.json');
+            mkdirSync(join(tempDir, '.omc'), { recursive: true });
+            writeFileSync(legacyRootPath, JSON.stringify({ active: true, session_id: 'pid-legacy-root-1' }));
+            const result = clearModeStateFile('ralph', tempDir, 'pid-legacy-root-1');
+            expect(result).toBe(true);
+            expect(existsSync(legacyRootPath)).toBe(false);
+        });
         it('should NOT delete legacy file owned by a different session', () => {
             const stateDir = join(tempDir, '.omc', 'state');
             mkdirSync(stateDir, { recursive: true });

@@ -21524,7 +21524,7 @@ var pythonReplTool = {
 
 // src/tools/state-tools.ts
 var import_fs11 = require("fs");
-var import_path9 = require("path");
+var import_path10 = require("path");
 
 // src/lib/worktree-paths.ts
 var import_crypto2 = require("crypto");
@@ -21803,6 +21803,7 @@ function validatePayload(payload, limits = {}) {
 
 // src/lib/mode-state-io.ts
 var import_fs9 = require("fs");
+var import_path8 = require("path");
 function getStateSessionOwner(state) {
   if (!state || typeof state !== "object") {
     return void 0;
@@ -21824,7 +21825,7 @@ function canClearStateForSession(state, sessionId) {
 
 // src/hooks/mode-registry/index.ts
 var import_fs10 = require("fs");
-var import_path8 = require("path");
+var import_path9 = require("path");
 
 // src/lib/mode-names.ts
 var MODE_NAMES = {
@@ -21896,19 +21897,19 @@ var MODE_CONFIGS = {
 };
 var EXCLUSIVE_MODES = [MODE_NAMES.AUTOPILOT];
 function getStateDir(cwd) {
-  return (0, import_path8.join)(getOmcRoot(cwd), "state");
+  return (0, import_path9.join)(getOmcRoot(cwd), "state");
 }
 function getStateFilePath(cwd, mode, sessionId) {
   const config2 = MODE_CONFIGS[mode];
   if (sessionId) {
     return resolveSessionStatePath(mode, sessionId, cwd);
   }
-  return (0, import_path8.join)(getStateDir(cwd), config2.stateFile);
+  return (0, import_path9.join)(getStateDir(cwd), config2.stateFile);
 }
 function getMarkerFilePath(cwd, mode) {
   const config2 = MODE_CONFIGS[mode];
   if (!config2.markerFile) return null;
-  return (0, import_path8.join)(getStateDir(cwd), config2.markerFile);
+  return (0, import_path9.join)(getStateDir(cwd), config2.markerFile);
 }
 function isJsonModeActive(cwd, mode, sessionId) {
   const config2 = MODE_CONFIGS[mode];
@@ -22095,7 +22096,7 @@ function readTeamNamesFromStateFile(statePath) {
   }
 }
 function pruneMissionBoardTeams(root, teamNames) {
-  const missionStatePath = (0, import_path9.join)(getOmcRoot(root), "state", "mission-state.json");
+  const missionStatePath = (0, import_path10.join)(getOmcRoot(root), "state", "mission-state.json");
   if (!(0, import_fs11.existsSync)(missionStatePath)) return 0;
   try {
     const parsed = JSON.parse((0, import_fs11.readFileSync)(missionStatePath, "utf-8"));
@@ -22122,7 +22123,7 @@ function pruneMissionBoardTeams(root, teamNames) {
   }
 }
 function cleanupTeamRuntimeState(root, teamNames) {
-  const teamStateRoot = (0, import_path9.join)(getOmcRoot(root), "state", "team");
+  const teamStateRoot = (0, import_path10.join)(getOmcRoot(root), "state", "team");
   if (!(0, import_fs11.existsSync)(teamStateRoot)) return 0;
   const shouldRemoveAll = teamNames == null;
   let removed = 0;
@@ -22137,7 +22138,7 @@ function cleanupTeamRuntimeState(root, teamNames) {
   for (const teamName of teamNames ?? []) {
     if (!teamName) continue;
     try {
-      (0, import_fs11.rmSync)((0, import_path9.join)(teamStateRoot, teamName), { recursive: true, force: true });
+      (0, import_fs11.rmSync)((0, import_path10.join)(teamStateRoot, teamName), { recursive: true, force: true });
       removed += 1;
     } catch {
     }
@@ -22149,6 +22150,36 @@ function getStatePath(mode, root) {
     return getStateFilePath(root, mode);
   }
   return resolveStatePath(mode, root);
+}
+function getLegacyStateFileCandidates(mode, root) {
+  const normalizedName = mode.endsWith("-state") ? mode : `${mode}-state`;
+  const candidates = [
+    getStatePath(mode, root),
+    (0, import_path10.join)(getOmcRoot(root), `${normalizedName}.json`)
+  ];
+  return [...new Set(candidates)];
+}
+function clearLegacyStateCandidates(mode, root, sessionId) {
+  let cleared = 0;
+  let hadFailure = false;
+  for (const legacyPath of getLegacyStateFileCandidates(mode, root)) {
+    if (!(0, import_fs11.existsSync)(legacyPath)) {
+      continue;
+    }
+    try {
+      if (sessionId) {
+        const raw = JSON.parse((0, import_fs11.readFileSync)(legacyPath, "utf-8"));
+        if (!canClearStateForSession(raw, sessionId)) {
+          continue;
+        }
+      }
+      (0, import_fs11.unlinkSync)(legacyPath);
+      cleared++;
+    } catch {
+      hadFailure = true;
+    }
+  }
+  return { cleared, hadFailure };
 }
 var stateReadTool = {
   name: "state_read",
@@ -22424,19 +22455,8 @@ var stateClearTool = {
         });
         if (MODE_CONFIGS[mode]) {
           const success = clearModeState(mode, root, sessionId);
-          let ghostCleaned2 = false;
-          try {
-            const legacyPath = getStateFilePath(root, mode);
-            if ((0, import_fs11.existsSync)(legacyPath)) {
-              const raw = JSON.parse((0, import_fs11.readFileSync)(legacyPath, "utf-8"));
-              if (canClearStateForSession(raw, sessionId)) {
-                (0, import_fs11.unlinkSync)(legacyPath);
-                ghostCleaned2 = true;
-              }
-            }
-          } catch {
-          }
-          const ghostNote2 = ghostCleaned2 ? " (ghost legacy file also removed)" : "";
+          const legacyCleanup2 = clearLegacyStateCandidates(mode, root, sessionId);
+          const ghostNote2 = legacyCleanup2.cleared > 0 ? " (ghost legacy file also removed)" : "";
           const runtimeCleanupNote2 = (() => {
             if (mode !== "team") return "";
             const teamNames = [...cleanedTeamNames];
@@ -22447,7 +22467,7 @@ var stateClearTool = {
             if (prunedMissions > 0) details.push(`pruned ${prunedMissions} HUD mission entry(ies)`);
             return details.length > 0 ? ` (${details.join(", ")})` : "";
           })();
-          if (success) {
+          if (success && !legacyCleanup2.hadFailure) {
             return {
               content: [{
                 type: "text",
@@ -22467,19 +22487,8 @@ var stateClearTool = {
         if ((0, import_fs11.existsSync)(statePath)) {
           (0, import_fs11.unlinkSync)(statePath);
         }
-        let ghostCleaned = false;
-        try {
-          const legacyPath = resolveStatePath(mode, root);
-          if ((0, import_fs11.existsSync)(legacyPath)) {
-            const raw = JSON.parse((0, import_fs11.readFileSync)(legacyPath, "utf-8"));
-            if (canClearStateForSession(raw, sessionId)) {
-              (0, import_fs11.unlinkSync)(legacyPath);
-              ghostCleaned = true;
-            }
-          }
-        } catch {
-        }
-        const ghostNote = ghostCleaned ? " (ghost legacy file also removed)" : "";
+        const legacyCleanup = clearLegacyStateCandidates(mode, root, sessionId);
+        const ghostNote = legacyCleanup.cleared > 0 ? " (ghost legacy file also removed)" : "";
         const runtimeCleanupNote = (() => {
           if (mode !== "team") return "";
           const teamNames = [...cleanedTeamNames];
@@ -22493,7 +22502,7 @@ var stateClearTool = {
         return {
           content: [{
             type: "text",
-            text: `Successfully cleared state for mode: ${mode} in session: ${sessionId}${ghostNote}${runtimeCleanupNote}`
+            text: `${legacyCleanup.hadFailure ? "Warning: Some files could not be removed" : "Successfully cleared state"} for mode: ${mode} in session: ${sessionId}${ghostNote}${runtimeCleanupNote}`
           }]
         };
       }
@@ -22503,24 +22512,19 @@ var stateClearTool = {
         collectTeamNamesForCleanup(getStateFilePath(root, "team"));
       }
       if (MODE_CONFIGS[mode]) {
-        const legacyStatePath = getStateFilePath(root, mode);
-        if ((0, import_fs11.existsSync)(legacyStatePath)) {
+        const primaryLegacyStatePath = getStateFilePath(root, mode);
+        if ((0, import_fs11.existsSync)(primaryLegacyStatePath)) {
           if (clearModeState(mode, root)) {
             clearedCount++;
           } else {
             errors.push("legacy path");
           }
         }
-      } else {
-        const statePath = getStatePath(mode, root);
-        if ((0, import_fs11.existsSync)(statePath)) {
-          try {
-            (0, import_fs11.unlinkSync)(statePath);
-            clearedCount++;
-          } catch {
-            errors.push("legacy path");
-          }
-        }
+      }
+      const extraLegacyCleanup = clearLegacyStateCandidates(mode, root);
+      clearedCount += extraLegacyCleanup.cleared;
+      if (extraLegacyCleanup.hadFailure) {
+        errors.push("legacy path");
       }
       const sessionIds = listSessionIds(root);
       for (const sid of sessionIds) {
@@ -22875,7 +22879,7 @@ var stateTools = [
 
 // src/hooks/notepad/index.ts
 var import_fs13 = require("fs");
-var import_path10 = require("path");
+var import_path11 = require("path");
 
 // src/lib/file-lock.ts
 var import_fs12 = require("fs");
@@ -23024,7 +23028,7 @@ var PRIORITY_HEADER = "## Priority Context";
 var WORKING_MEMORY_HEADER = "## Working Memory";
 var MANUAL_HEADER = "## MANUAL";
 function getNotepadPath(directory) {
-  return (0, import_path10.join)(getOmcRoot(directory), NOTEPAD_FILENAME);
+  return (0, import_path11.join)(getOmcRoot(directory), NOTEPAD_FILENAME);
 }
 function initNotepad(directory) {
   const omcDir = getOmcRoot(directory);
@@ -23659,17 +23663,17 @@ var contextCollector = new ContextCollector();
 
 // src/hooks/rules-injector/finder.ts
 var import_fs14 = require("fs");
-var import_path12 = require("path");
+var import_path13 = require("path");
 
 // src/hooks/rules-injector/constants.ts
-var import_path11 = require("path");
+var import_path12 = require("path");
 var import_os2 = require("os");
-var OMC_STORAGE_DIR = (0, import_path11.join)((0, import_os2.homedir)(), ".omc");
-var RULES_INJECTOR_STORAGE = (0, import_path11.join)(OMC_STORAGE_DIR, "rules-injector");
+var OMC_STORAGE_DIR = (0, import_path12.join)((0, import_os2.homedir)(), ".omc");
+var RULES_INJECTOR_STORAGE = (0, import_path12.join)(OMC_STORAGE_DIR, "rules-injector");
 
 // src/hooks/project-memory/storage.ts
 var import_promises = __toESM(require("fs/promises"), 1);
-var import_path13 = __toESM(require("path"), 1);
+var import_path14 = __toESM(require("path"), 1);
 
 // src/hooks/project-memory/constants.ts
 var CACHE_EXPIRY_MS = 24 * 60 * 60 * 1e3;
@@ -23693,7 +23697,7 @@ async function loadProjectMemory(projectRoot) {
 }
 async function saveProjectMemory(projectRoot, memory) {
   const memoryPath = getMemoryPath(projectRoot);
-  const omcDir = import_path13.default.dirname(memoryPath);
+  const omcDir = import_path14.default.dirname(memoryPath);
   try {
     await import_promises.default.mkdir(omcDir, { recursive: true });
     await atomicWriteJson(memoryPath, memory);
@@ -23709,11 +23713,11 @@ async function withProjectMemoryLock(projectRoot, fn) {
 
 // src/hooks/project-memory/detector.ts
 var import_promises3 = __toESM(require("fs/promises"), 1);
-var import_path15 = __toESM(require("path"), 1);
+var import_path16 = __toESM(require("path"), 1);
 
 // src/hooks/project-memory/directory-mapper.ts
 var import_promises2 = __toESM(require("fs/promises"), 1);
-var import_path14 = __toESM(require("path"), 1);
+var import_path15 = __toESM(require("path"), 1);
 
 // src/hooks/project-memory/directive-detector.ts
 function addDirective(directives, newDirective) {
@@ -23736,7 +23740,7 @@ function addDirective(directives, newDirective) {
 }
 
 // src/hooks/project-memory/hot-path-tracker.ts
-var import_path16 = __toESM(require("path"), 1);
+var import_path17 = __toESM(require("path"), 1);
 
 // src/hooks/project-memory/learner.ts
 var writeMutexes = /* @__PURE__ */ new Map();
@@ -24097,20 +24101,20 @@ var memoryTools = [
 
 // src/tools/trace-tools.ts
 var import_fs17 = require("fs");
-var import_path19 = require("path");
+var import_path20 = require("path");
 
 // src/hooks/subagent-tracker/session-replay.ts
 var import_fs15 = require("fs");
-var import_path17 = require("path");
+var import_path18 = require("path");
 var REPLAY_PREFIX = "agent-replay-";
 var MAX_REPLAY_SIZE_BYTES = 5 * 1024 * 1024;
 function getReplayFilePath(directory, sessionId) {
-  const stateDir = (0, import_path17.join)(getOmcRoot(directory), "state");
+  const stateDir = (0, import_path18.join)(getOmcRoot(directory), "state");
   if (!(0, import_fs15.existsSync)(stateDir)) {
     (0, import_fs15.mkdirSync)(stateDir, { recursive: true });
   }
   const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
-  return (0, import_path17.join)(stateDir, `${REPLAY_PREFIX}${safeId}.jsonl`);
+  return (0, import_path18.join)(stateDir, `${REPLAY_PREFIX}${safeId}.jsonl`);
 }
 function readReplayEvents(directory, sessionId) {
   const filePath = getReplayFilePath(directory, sessionId);
@@ -24290,12 +24294,12 @@ function getReplaySummary(directory, sessionId) {
 var import_child_process9 = require("child_process");
 var import_fs16 = require("fs");
 var import_os3 = require("os");
-var import_path18 = require("path");
+var import_path19 = require("path");
 var import_readline = require("readline");
 var DEFAULT_LIMIT = 10;
 var DEFAULT_CONTEXT_CHARS = 120;
 function getClaudeConfigDir() {
-  return process.env.CLAUDE_CONFIG_DIR || (0, import_path18.join)((0, import_os3.homedir)(), ".claude");
+  return process.env.CLAUDE_CONFIG_DIR || (0, import_path19.join)((0, import_os3.homedir)(), ".claude");
 }
 function compactWhitespace(text) {
   return text.replace(/\s+/g, " ").trim();
@@ -24334,16 +24338,16 @@ function getMainRepoRoot(projectRoot) {
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"]
     }).trim();
-    const absoluteCommonDir = (0, import_path18.resolve)(projectRoot, gitCommonDir);
-    const mainRepoRoot = (0, import_path18.dirname)(absoluteCommonDir);
+    const absoluteCommonDir = (0, import_path19.resolve)(projectRoot, gitCommonDir);
+    const mainRepoRoot = (0, import_path19.dirname)(absoluteCommonDir);
     return mainRepoRoot === projectRoot ? null : mainRepoRoot;
   } catch {
     return null;
   }
 }
 function getClaudeWorktreeParent(projectRoot) {
-  const marker = `${(0, import_path18.normalize)("/.claude/worktrees/")}`;
-  const normalizedRoot = (0, import_path18.normalize)(projectRoot);
+  const marker = `${(0, import_path19.normalize)("/.claude/worktrees/")}`;
+  const normalizedRoot = (0, import_path19.normalize)(projectRoot);
   const idx = normalizedRoot.indexOf(marker);
   if (idx === -1) return null;
   return normalizedRoot.slice(0, idx) || null;
@@ -24363,7 +24367,7 @@ function listJsonlFiles(rootDir) {
       continue;
     }
     for (const entry of entries) {
-      const fullPath = (0, import_path18.join)(current, entry.name);
+      const fullPath = (0, import_path19.join)(current, entry.name);
       if (entry.isDirectory()) {
         stack.push(fullPath);
         continue;
@@ -24397,21 +24401,21 @@ function buildCurrentProjectTargets(projectRoot) {
   if (claudeWorktreeParent) projectRoots.add(claudeWorktreeParent);
   const targets = [];
   for (const root of projectRoots) {
-    const encodedDir = (0, import_path18.join)(claudeDir, "projects", encodeProjectPath(root));
+    const encodedDir = (0, import_path19.join)(claudeDir, "projects", encodeProjectPath(root));
     for (const filePath of listJsonlFiles(encodedDir)) {
       targets.push({ filePath, sourceType: "project-transcript" });
     }
   }
-  const legacyTranscriptsDir = (0, import_path18.join)(claudeDir, "transcripts");
+  const legacyTranscriptsDir = (0, import_path19.join)(claudeDir, "transcripts");
   for (const filePath of listJsonlFiles(legacyTranscriptsDir)) {
     targets.push({ filePath, sourceType: "legacy-transcript" });
   }
   const omcRoot = getOmcRoot(projectRoot);
-  const sessionSummariesDir = (0, import_path18.join)(omcRoot, "sessions");
+  const sessionSummariesDir = (0, import_path19.join)(omcRoot, "sessions");
   for (const filePath of listJsonlFiles(sessionSummariesDir)) {
     targets.push({ filePath, sourceType: "omc-session-summary" });
   }
-  const replayDir = (0, import_path18.join)(omcRoot, "state");
+  const replayDir = (0, import_path19.join)(omcRoot, "state");
   if ((0, import_fs16.existsSync)(replayDir)) {
     for (const filePath of listJsonlFiles(replayDir)) {
       if (filePath.includes("agent-replay-") && filePath.endsWith(".jsonl")) {
@@ -24424,10 +24428,10 @@ function buildCurrentProjectTargets(projectRoot) {
 function buildAllProjectTargets() {
   const claudeDir = getClaudeConfigDir();
   const targets = [];
-  for (const filePath of listJsonlFiles((0, import_path18.join)(claudeDir, "projects"))) {
+  for (const filePath of listJsonlFiles((0, import_path19.join)(claudeDir, "projects"))) {
     targets.push({ filePath, sourceType: "project-transcript" });
   }
-  for (const filePath of listJsonlFiles((0, import_path18.join)(claudeDir, "transcripts"))) {
+  for (const filePath of listJsonlFiles((0, import_path19.join)(claudeDir, "transcripts"))) {
     targets.push({ filePath, sourceType: "legacy-transcript" });
   }
   return uniqueSortedTargets(targets);
@@ -24436,9 +24440,9 @@ function isWithinProject(projectPath, projectRoots) {
   if (!projectPath) {
     return false;
   }
-  const normalizedProjectPath = (0, import_path18.normalize)((0, import_path18.resolve)(projectPath));
+  const normalizedProjectPath = (0, import_path19.normalize)((0, import_path19.resolve)(projectPath));
   return projectRoots.some((root) => {
-    const normalizedRoot = (0, import_path18.normalize)((0, import_path18.resolve)(root));
+    const normalizedRoot = (0, import_path19.normalize)((0, import_path19.resolve)(root));
     return normalizedProjectPath === normalizedRoot || normalizedProjectPath.startsWith(`${normalizedRoot}/`);
   });
 }
@@ -24753,12 +24757,12 @@ var sessionSearchTool = {
 // src/tools/trace-tools.ts
 var REPLAY_PREFIX2 = "agent-replay-";
 function findLatestSessionId(directory) {
-  const stateDir = (0, import_path19.join)(directory, ".omc", "state");
+  const stateDir = (0, import_path20.join)(directory, ".omc", "state");
   try {
     const files = (0, import_fs17.readdirSync)(stateDir).filter((f) => f.startsWith(REPLAY_PREFIX2) && f.endsWith(".jsonl")).map((f) => ({
       name: f,
       sessionId: f.slice(REPLAY_PREFIX2.length, -".jsonl".length),
-      mtime: (0, import_fs17.statSync)((0, import_path19.join)(stateDir, f)).mtimeMs
+      mtime: (0, import_fs17.statSync)((0, import_path20.join)(stateDir, f)).mtimeMs
     })).sort((a, b) => b.mtime - a.mtime);
     return files.length > 0 ? files[0].sessionId : null;
   } catch {

@@ -6,7 +6,8 @@
  * and file permissions so that individual mode modules don't duplicate this logic.
  */
 import { existsSync, readFileSync, writeFileSync, unlinkSync, renameSync } from 'fs';
-import { resolveStatePath, resolveSessionStatePath, ensureSessionStateDir, ensureOmcDir, } from './worktree-paths.js';
+import { join } from 'path';
+import { getOmcRoot, resolveStatePath, resolveSessionStatePath, ensureSessionStateDir, ensureOmcDir, } from './worktree-paths.js';
 export function getStateSessionOwner(state) {
     if (!state || typeof state !== 'object') {
         return undefined;
@@ -41,6 +42,14 @@ function resolveFile(mode, directory, sessionId) {
         return resolveSessionStatePath(mode, sessionId, baseDir);
     }
     return resolveStatePath(mode, baseDir);
+}
+function getLegacyStateCandidates(mode, directory) {
+    const baseDir = directory || process.cwd();
+    const normalizedName = mode.endsWith('-state') ? mode : `${mode}-state`;
+    return [
+        resolveStatePath(mode, baseDir),
+        join(getOmcRoot(baseDir), `${normalizedName}.json`),
+    ];
 }
 // ---------------------------------------------------------------------------
 // Public API
@@ -127,8 +136,10 @@ export function clearModeStateFile(mode, directory, sessionId) {
     }
     // Ghost-legacy cleanup: if sessionId provided, also check legacy path
     if (sessionId) {
-        const legacyPath = resolveFile(mode, directory); // no sessionId = legacy
-        if (existsSync(legacyPath)) {
+        for (const legacyPath of getLegacyStateCandidates(mode, directory)) {
+            if (!existsSync(legacyPath)) {
+                continue;
+            }
             try {
                 const content = readFileSync(legacyPath, 'utf-8');
                 const legacyState = JSON.parse(content);

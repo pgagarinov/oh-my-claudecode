@@ -70,5 +70,18 @@ describe('keyword-detector packaged artifacts', () => {
         expect(templateResult).toEqual({ continue: true, suppressOutput: true });
         expect(pluginResult).toEqual({ continue: true, suppressOutput: true });
     });
+    it('does not auto-trigger informational keyword questions in packaged artifacts', () => {
+        const templatePath = join(packageRoot, 'templates', 'hooks', 'keyword-detector.mjs');
+        const pluginPath = join(packageRoot, 'scripts', 'keyword-detector.mjs');
+        for (const prompt of [
+            'What is ralph and how do I use it?',
+            'ralph 와 ralplan 은 뭐야?',
+            'ralplan とは？ 使い方を教えて',
+            'ralph 是什么？怎么用？',
+        ]) {
+            expect(runKeywordHook(templatePath, prompt)).toEqual({ continue: true, suppressOutput: true });
+            expect(runKeywordHook(pluginPath, prompt)).toEqual({ continue: true, suppressOutput: true });
+        }
+    });
 });
 //# sourceMappingURL=hook-templates.test.js.map

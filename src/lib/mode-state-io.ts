@@ -7,7 +7,9 @@
  */
 
 import { existsSync, readFileSync, writeFileSync, unlinkSync, renameSync } from 'fs';
+import { join } from 'path';
 import {
+  getOmcRoot,
   resolveStatePath,
   resolveSessionStatePath,
   ensureSessionStateDir,
@@ -56,6 +58,16 @@ function resolveFile(mode: string, directory?: string, sessionId?: string): stri
     return resolveSessionStatePath(mode, sessionId, baseDir);
   }
   return resolveStatePath(mode, baseDir);
+}
+
+function getLegacyStateCandidates(mode: string, directory?: string): string[] {
+  const baseDir = directory || process.cwd();
+  const normalizedName = mode.endsWith('-state') ? mode : `${mode}-state`;
+
+  return [
+    resolveStatePath(mode, baseDir),
+    join(getOmcRoot(baseDir), `${normalizedName}.json`),
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -157,8 +169,11 @@ export function clearModeStateFile(
 
   // Ghost-legacy cleanup: if sessionId provided, also check legacy path
   if (sessionId) {
-    const legacyPath = resolveFile(mode, directory); // no sessionId = legacy
-    if (existsSync(legacyPath)) {
+    for (const legacyPath of getLegacyStateCandidates(mode, directory)) {
+      if (!existsSync(legacyPath)) {
+        continue;
+      }
+
       try {
         const content = readFileSync(legacyPath, 'utf-8');
         const legacyState = JSON.parse(content) as Record<string, unknown>;
