@@ -855,12 +855,12 @@ export async function sendToWorker(
       return false;
     }
 
-    // Fail-open: one last nudge, then continue regardless.
+    // Fail-closed: one last nudge, but report failure so callers can retry.
     await sendKey('C-m');
     await sleep(120);
     await sendKey('C-m');
 
-    return true;
+    return false;
   } catch {
     return false;
   }
