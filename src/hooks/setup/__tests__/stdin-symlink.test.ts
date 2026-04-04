@@ -129,6 +129,35 @@ describe('ensureStdinSymlink', () => {
     });
   });
 
+  it('removes dangling symlink and copies when symlink creation fails', () => {
+    withMockedHomedir(homeDir, () => {
+      mkdirSync(hooksLibDir, { recursive: true });
+      const stdinDst = join(hooksLibDir, 'stdin.mjs');
+
+      // Create a dangling symlink (points to non-existent target)
+      const danglingTarget = join(tmpdir(), 'non-existent-target');
+      symlinkSync(danglingTarget, stdinDst);
+
+      // Verify it's a dangling symlink
+      expect(existsSync(stdinDst)).toBe(false); // existsSync returns false for dangling
+      expect(lstatSync(stdinDst).isSymbolicLink()).toBe(true);
+
+      // Mock symlinkSync to fail
+      const originalSymlinkSync = require('fs').symlinkSync;
+      require('fs').symlinkSync = () => { throw new Error('symlink not supported'); };
+
+      try {
+        ensureStdinSymlink(pluginRoot);
+
+        // Should have removed dangling symlink and copied the file
+        expect(existsSync(stdinDst)).toBe(true);
+        expect(readFileSync(stdinDst, 'utf-8')).toBe('// fake stdin.mjs content\n');
+      } finally {
+        require('fs').symlinkSync = originalSymlinkSync;
+      }
+    });
+  });
+
   it('is idempotent — calling twice does not throw', () => {
     withMockedHomedir(homeDir, () => {
       ensureStdinSymlink(pluginRoot);

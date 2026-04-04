@@ -240,15 +240,28 @@ export function ensureStdinSymlink(pluginRoot: string): void {
     renameSync(tmpDst, stdinDst);
   } catch {
     // Symlink creation failed (platform may not support symlinks, e.g. some Windows configs)
-    // Only copy if destination doesn't exist; never overwrite a working file
-    if (!existsSync(stdinDst)) {
+    // Use lstatSync to detect dangling symlinks (existsSync returns false for broken symlinks)
+    let shouldCopy = false;
+    try {
+      const dstStat = lstatSync(stdinDst);
+      if (dstStat.isSymbolicLink()) {
+        // Dangling symlink - remove it and copy fresh
+        unlinkSync(stdinDst);
+        shouldCopy = true;
+      }
+      // else: regular file exists, leave it alone (don't overwrite)
+    } catch {
+      // Destination doesn't exist - safe to copy
+      shouldCopy = true;
+    }
+
+    if (shouldCopy) {
       try {
         copyFileSync(stdinSrc, stdinDst);
       } catch {
         // Non-fatal: older setups may have different permissions/structures
       }
     }
-    // If stdinDst existed but symlink failed, leave the working file intact
   }
 }
 
@@ -275,8 +288,13 @@ export async function processSetupInit(input: SetupInput): Promise<HookOutput> {
   }
 
   // Always heal the stdin.mjs symlink so upgrades don't break hooks
+  // Best-effort: non-fatal, don't block init if this fails
   if (pluginRoot) {
-    ensureStdinSymlink(pluginRoot);
+    try {
+      ensureStdinSymlink(pluginRoot);
+    } catch {
+      // Non-fatal: stdin symlink healing is best-effort maintenance
+    }
   }
 
   try {
