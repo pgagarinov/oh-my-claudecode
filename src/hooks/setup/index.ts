@@ -222,6 +222,8 @@ export function ensureStdinSymlink(pluginRoot: string): void {
   const tmpDst = stdinDst + '.tmp';
 
   try {
+    // Remove any stale temp file first (e.g. from crash or failed previous run)
+    try { unlinkSync(tmpDst); } catch { /* ignore if didn't exist */ }
     // Create new symlink with temp name first
     symlinkSync(stdinSrc, tmpDst);
 

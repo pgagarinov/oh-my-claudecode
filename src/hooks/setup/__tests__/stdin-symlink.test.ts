@@ -134,6 +134,28 @@ describe('ensureStdinSymlink', () => {
     });
   });
 
+  it('removes stale .tmp file before creating new symlink', () => {
+    withMockedHomedir(homeDir, () => {
+      mkdirSync(hooksLibDir, { recursive: true });
+      const stdinDst = join(hooksLibDir, 'stdin.mjs');
+      const tmpDst = stdinDst + '.tmp';
+
+      // Create a stale .tmp file from a previous failed run
+      writeFileSync(tmpDst, '// stale tmp content\n');
+
+      // Run the function - should succeed despite stale tmp
+      ensureStdinSymlink(pluginRoot);
+
+      // Symlink should be created pointing to correct source
+      expect(existsSync(stdinDst)).toBe(true);
+      expect(lstatSync(stdinDst).isSymbolicLink()).toBe(true);
+      expect(readlinkSync(stdinDst)).toBe(stdinSrcPath);
+
+      // Old tmp should be gone
+      expect(existsSync(tmpDst)).toBe(false);
+    });
+  });
+
   it('removes dangling symlink and copies when symlink creation fails', () => {
     withMockedHomedir(homeDir, () => {
       mkdirSync(hooksLibDir, { recursive: true });
