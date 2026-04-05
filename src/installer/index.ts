@@ -8,7 +8,7 @@
  * Bash hook scripts were removed in v3.9.0.
  */
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, chmodSync, readdirSync } from 'fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, copyFileSync, chmodSync, readdirSync, cpSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { homedir } from 'os';
@@ -222,6 +222,7 @@ export interface InstallOptions {
   forceHooks?: boolean;
   refreshHooksInPlugin?: boolean;
   skipHud?: boolean;
+  noPlugin?: boolean;
 }
 
 /**
@@ -521,6 +522,20 @@ function directoryHasMarkdownFiles(directory: string): boolean {
   }
 }
 
+function directoryHasSkillDefinitions(directory: string): boolean {
+  if (!existsSync(directory)) {
+    return false;
+  }
+
+  try {
+    return readdirSync(directory, { withFileTypes: true }).some(entry =>
+      entry.isDirectory() && existsSync(join(directory, entry.name, 'SKILL.md'))
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function getInstalledOmcPluginRoots(): string[] {
   const pluginRoots = new Set<string>();
   const pluginRoot = process.env.CLAUDE_PLUGIN_ROOT?.trim();
@@ -566,6 +581,45 @@ export function hasPluginProvidedAgentFiles(): boolean {
   return getInstalledOmcPluginRoots().some(pluginRoot =>
     directoryHasMarkdownFiles(join(pluginRoot, 'agents'))
   );
+}
+
+export function hasPluginProvidedSkillFiles(): boolean {
+  return getInstalledOmcPluginRoots().some(pluginRoot =>
+    directoryHasSkillDefinitions(join(pluginRoot, 'skills'))
+  );
+}
+
+export function hasEnabledOmcPlugin(): boolean {
+  if (process.env.CLAUDE_PLUGIN_ROOT?.trim()) {
+    return true;
+  }
+
+  if (!existsSync(SETTINGS_FILE)) {
+    return false;
+  }
+
+  try {
+    const settings = JSON.parse(readFileSync(SETTINGS_FILE, 'utf-8')) as {
+      plugins?: unknown;
+    };
+    const plugins = settings.plugins;
+
+    if (Array.isArray(plugins)) {
+      return plugins.some(plugin =>
+        typeof plugin === 'string' && plugin.toLowerCase().includes('oh-my-claudecode')
+      );
+    }
+
+    if (plugins && typeof plugins === 'object') {
+      return Object.entries(plugins as Record<string, unknown>).some(([pluginId, value]) =>
+        pluginId.toLowerCase().includes('oh-my-claudecode') && value !== false
+      );
+    }
+  } catch {
+    // Ignore unreadable settings and treat plugin mode as disabled.
+  }
+
+  return false;
 }
 
 /**
@@ -655,17 +709,29 @@ function loadCommandDefinitions(): Record<string, string> {
   return definitions;
 }
 
-/**
- * Load CLAUDE.md content from /docs/CLAUDE.md
- */
-function loadBundledSkillContent(skillName: string): string | null {
-  const skillPath = join(getPackageDir(), 'skills', skillName, 'SKILL.md');
+function syncBundledSkillDefinitions(log: (msg: string) => void): string[] {
+  const skillsDir = join(getPackageDir(), 'skills');
+  const installedSkills: string[] = [];
 
-  if (!existsSync(skillPath)) {
-    return null;
+  if (!existsSync(skillsDir)) {
+    return installedSkills;
   }
 
-  return readFileSync(skillPath, 'utf-8');
+  for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+
+    const relativePath = join(entry.name, 'SKILL.md');
+    const sourceDir = join(skillsDir, entry.name);
+    const sourceSkillPath = join(sourceDir, 'SKILL.md');
+    if (!existsSync(sourceSkillPath)) continue;
+
+    const targetDir = join(SKILLS_DIR, entry.name);
+    cpSync(sourceDir, targetDir, { recursive: true, force: true });
+    installedSkills.push(relativePath.replace(/\\/g, '/'));
+    log(`  Synced ${relativePath}`);
+  }
+
+  return installedSkills;
 }
 
 function loadClaudeMdContent(): string {
@@ -867,7 +933,11 @@ export function install(options: InstallOptions = {}): InstallResult {
   const runningAsPlugin = isRunningAsPlugin();
   const projectScoped = isProjectScopedPlugin();
   const pluginProvidesAgentFiles = hasPluginProvidedAgentFiles();
+  const pluginProvidesSkillFiles = hasPluginProvidedSkillFiles();
+  const enabledOmcPlugin = hasEnabledOmcPlugin();
   const shouldInstallLegacyAgents = !runningAsPlugin && !pluginProvidesAgentFiles;
+  const shouldInstallBundledSkills =
+    options.noPlugin === true || !enabledOmcPlugin || !pluginProvidesSkillFiles;
   const allowPluginHookRefresh = runningAsPlugin && options.refreshHooksInPlugin && !projectScoped;
   if (runningAsPlugin) {
     log('Detected Claude Code plugin context - skipping agent/command file installation');
@@ -898,8 +968,12 @@ export function install(options: InstallOptions = {}): InstallResult {
 
   try {
     // Ensure base config directory exists (skip for project-scoped plugins)
-    if (!projectScoped && !existsSync(CLAUDE_CONFIG_DIR)) {
+    if ((!projectScoped || shouldInstallBundledSkills) && !existsSync(CLAUDE_CONFIG_DIR)) {
       mkdirSync(CLAUDE_CONFIG_DIR, { recursive: true });
+    }
+
+    if (shouldInstallBundledSkills && !existsSync(SKILLS_DIR)) {
+      mkdirSync(SKILLS_DIR, { recursive: true });
     }
 
     // Skip agent/command/hook file installation when running as plugin
@@ -969,25 +1043,6 @@ export function install(options: InstallOptions = {}): InstallResult {
         }
       }
 
-      // NOTE: SKILL_DEFINITIONS removed - skills now only installed via COMMAND_DEFINITIONS
-      // to avoid duplicate entries in Claude Code's available skills list
-
-      const omcReferenceSkillContent = loadBundledSkillContent('omc-reference');
-      if (omcReferenceSkillContent) {
-        const omcReferenceDir = join(SKILLS_DIR, 'omc-reference');
-        const omcReferencePath = join(omcReferenceDir, 'SKILL.md');
-        if (!existsSync(omcReferenceDir)) {
-          mkdirSync(omcReferenceDir, { recursive: true });
-        }
-        if (existsSync(omcReferencePath) && !options.force) {
-          log('  Skipping omc-reference/SKILL.md (already exists)');
-        } else {
-          writeFileSync(omcReferencePath, omcReferenceSkillContent);
-          result.installedSkills.push('omc-reference/SKILL.md');
-          log('  Installed omc-reference/SKILL.md');
-        }
-      }
-
       // Standalone installs still need ~/.claude/hooks/* scripts because their
       // settings.json hook entries execute those local paths directly. Plugin installs
       // keep using hooks/hooks.json + scripts/ under CLAUDE_PLUGIN_ROOT.
@@ -995,6 +1050,19 @@ export function install(options: InstallOptions = {}): InstallResult {
       result.hooksConfigured = true; // Will be set properly after consolidated settings.json write
     } else {
       log('Skipping agent/command/hook files (managed by plugin system)');
+    }
+
+    if (shouldInstallBundledSkills) {
+      log(options.noPlugin
+        ? 'Installing bundled skills from local package (--no-plugin)...'
+        : !enabledOmcPlugin
+          ? 'Installing bundled skills from local package (no enabled OMC plugin detected)...'
+          : 'Installing bundled skills from local package (enabled plugin skill files not found)...');
+      result.installedSkills.push(...syncBundledSkillDefinitions(log));
+    } else if (pluginProvidesSkillFiles) {
+      log('Skipping bundled skill installation (plugin-provided skills are available). Use --no-plugin to force local skill sync.');
+    } else if (runningAsPlugin) {
+      log('Skipping bundled skill installation (managed by plugin system)');
     }
 
     // Install CLAUDE.md with merge support.
