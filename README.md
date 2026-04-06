@@ -506,3 +506,5 @@ If Oh-My-ClaudeCode helps your workflow, consider sponsoring:
 - 📝 Contribute code
 
 <!-- private review poller test -->
+
+<!-- e2e test marker 2026-04-06T23:20:39Z -->
