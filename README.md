@@ -508,3 +508,5 @@ If Oh-My-ClaudeCode helps your workflow, consider sponsoring:
 <!-- private review poller test -->
 
 <!-- e2e test marker 2026-04-06T23:20:39Z -->
+
+<!-- e2e test marker (skill path) 2026-04-07T00:04:45Z -->
