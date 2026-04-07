@@ -259,6 +259,9 @@ export function readLog(root: string): string | null {
 
 /** Write a wiki page to disk. MUST be called inside withWikiLock. */
 export function writePageUnsafe(root: string, page: WikiPage): void {
+  if (RESERVED_FILES.has(page.filename)) {
+    throw new Error(`Cannot write to reserved wiki file: ${page.filename}`);
+  }
   const wikiDir = ensureWikiDir(root);
   const filePath = safeWikiPath(wikiDir, page.filename);
   if (!filePath) throw new Error(`Invalid wiki page filename: ${page.filename}`);
