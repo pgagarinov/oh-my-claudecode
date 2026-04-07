@@ -70,6 +70,8 @@ npm i -g oh-my-claude-sisyphus@latest
 omc setup
 ```
 
+If you run OMC via `omc --plugin-dir <path>` or `claude --plugin-dir <path>`, add `--plugin-dir-mode` to `omc setup` (or export `OMC_PLUGIN_ROOT` before running it) so the installer doesn't duplicate skills/agents that the plugin already provides at runtime.
+
 **Step 3: Build something**
 
 ```bash
@@ -242,6 +244,7 @@ Multiple strategies for different use cases — from Team-backed orchestration t
 
 - **Magic keywords** - `ralph`, `ulw`, `ralplan`; Team stays explicit via `/team`
 - **HUD statusline** - Real-time orchestration metrics in your status bar
+  - If you launch Claude Code directly with `claude --plugin-dir <path>` (bypassing the `omc` shim), export `OMC_PLUGIN_ROOT=<path>` in your shell so the HUD bundle resolves to the same checkout as the plugin loader.
 - **Skill learning** - Extract reusable patterns from your sessions
 - **Analytics & cost tracking** - Understand token usage across all sessions
 

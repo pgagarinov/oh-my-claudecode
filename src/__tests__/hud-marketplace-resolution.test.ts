@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { OMC_PLUGIN_ROOT_ENV } from '../lib/env-vars.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -10,6 +11,17 @@ const __dirname = dirname(__filename);
 const root = join(__dirname, '..', '..');
 
 const tempDirs: string[] = [];
+
+let savedPluginRoot: string | undefined;
+beforeEach(() => {
+  savedPluginRoot = process.env[OMC_PLUGIN_ROOT_ENV];
+  delete process.env[OMC_PLUGIN_ROOT_ENV];
+});
+
+afterEach(() => {
+  if (savedPluginRoot === undefined) delete process.env[OMC_PLUGIN_ROOT_ENV];
+  else process.env[OMC_PLUGIN_ROOT_ENV] = savedPluginRoot;
+});
 
 afterEach(() => {
   while (tempDirs.length > 0) {
@@ -50,10 +62,10 @@ describe('HUD marketplace resolution', () => {
     expect(content).toContain('import { fileURLToPath, pathToFileURL } from "node:url"');
     expect(content).toContain('const { getClaudeConfigDir } = await import(pathToFileURL(join(__dirname, "lib", "config-dir.mjs")).href);');
     expect(content).toContain('await import(pathToFileURL(pluginPath).href);');
-    expect(content).toContain('await import(pathToFileURL(devPath).href);');
+    // OMC_PLUGIN_ROOT replaced the legacy devPath branch (binary-weaving-mountain).
+    expect(content).toContain('await import(pathToFileURL(envHudPath).href);');
     expect(content).toContain('await import(pathToFileURL(marketplaceHudPath).href);');
     expect(content).not.toContain('await import(pluginPath);');
-    expect(content).not.toContain('await import(devPath);');
     expect(content).not.toContain('await import(marketplaceHudPath);');
   });
 

@@ -1148,6 +1148,7 @@ describe('runClaude outside-tmux — env forwarding', () => {
     delete process.env.OMC_DISCORD;
     delete process.env.OMC_SLACK;
     delete process.env.OMC_WEBHOOK;
+    delete process.env.OMC_PLUGIN_ROOT;
 
     runClaude('/tmp', [], 'sid');
 
