@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdirSync, rmSync, existsSync, mkdtempSync } from 'fs';
 import { execSync } from 'child_process';
-import { join } from 'path';
+import { join, basename } from 'path';
 import {
   validatePath,
   resolveOmcPath,
@@ -473,6 +473,23 @@ describe('worktree-paths', () => {
       } finally {
         rmSync(parentDir, { recursive: true, force: true });
         rmSync(subDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should not change identifier for bare repos (avoid dirname going to parent)', () => {
+      const parentDir = mkdtempSync('/tmp/worktree-paths-bare-parent-');
+      const bareDir = `${parentDir}/my-bare-repo.git`;
+      try {
+        execSync(`git init --bare "${bareDir}"`, { stdio: 'pipe' });
+        clearWorktreeCache();
+
+        const id = getProjectIdentifier(bareDir);
+
+        // Should use the bare repo's own name, not the parent directory
+        expect(id).toContain('my-bare-repo');
+        expect(id).not.toContain(basename(parentDir));
+      } finally {
+        rmSync(parentDir, { recursive: true, force: true });
       }
     });
   });
