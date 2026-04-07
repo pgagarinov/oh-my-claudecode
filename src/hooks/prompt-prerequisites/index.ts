@@ -1,3 +1,4 @@
+import { isAbsolute, relative } from "node:path";
 import { clearModeStateFile, readModeState, writeModeState } from "../../lib/mode-state-io.js";
 import type { PluginConfig } from "../../shared/types.js";
 
@@ -341,7 +342,9 @@ export function recordPromptPrerequisiteProgress(
   const readPath = extractReadFilePath(toolName, toolInput);
   if (readPath) {
     for (const requiredPath of state.required_file_paths) {
-      if (!state.completed_file_paths.includes(requiredPath) && (normalizePath(readPath) === requiredPath || normalizePath(readPath).endsWith("/" + requiredPath))) {
+      const normalizedRead = normalizePath(readPath);
+      const relativeRead = isAbsolute(normalizedRead) ? relative(directory, normalizedRead) : normalizedRead;
+      if (!state.completed_file_paths.includes(requiredPath) && (relativeRead === requiredPath || normalizedRead === requiredPath)) {
         state.completed_file_paths = dedupe([...state.completed_file_paths, requiredPath]);
         fileSatisfied = requiredPath;
       }
