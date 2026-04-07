@@ -83,10 +83,11 @@ describe('HUD Windows Compatibility', () => {
   });
 
   describe('Numeric Version Sorting', () => {
-    it('shared HUD wrapper template should use numeric version sorting', () => {
+    it('shared HUD wrapper template should use semver-aware version sorting', () => {
       const templatePath = join(packageRoot, 'scripts', 'lib', 'hud-wrapper-template.txt');
       const content = readFileSync(templatePath, 'utf-8');
-      expect(content).toContain('localeCompare(b, undefined, { numeric: true })');
+      expect(content).toContain('const compareSemverDesc = (a, b) => {');
+      expect(content).toContain('stable (empty pre) wins over any prerelease');
     });
 
     it('numeric sort should correctly order versions', () => {
