@@ -514,3 +514,5 @@ If Oh-My-ClaudeCode helps your workflow, consider sponsoring:
 <!-- e2e test marker (post-fix) 2026-04-07T00:33:43Z -->
 
 <!-- e2e test marker (post-fix Ralph) 2026-04-07T00:37:27Z -->
+
+<!-- e2e test (file-based decisions) 2026-04-07T02:34:32Z -->
