@@ -584,7 +584,7 @@ export const DEFAULT_HUD_CONFIG: HudConfig = {
     contextCritical: 85,
     ralphWarning: 7,
   },
-  staleTaskThresholdMinutes: 30,
+  staleTaskThresholdMinutes: 10,
   contextLimitWarning: {
     threshold: 80,
     autoCompact: false,
