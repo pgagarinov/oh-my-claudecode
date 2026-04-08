@@ -84468,7 +84468,13 @@ async function runHudWatchLoop(options) {
 var version2 = getRuntimePackageVersion();
 function applyPluginDirOption(rawPath) {
   if (!rawPath) return;
-  const resolved = resolvePluginDirArg(rawPath);
+  let resolved;
+  try {
+    resolved = resolvePluginDirArg(rawPath);
+  } catch (err) {
+    console.error(source_default.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+    process.exit(1);
+  }
   const existing = process.env[OMC_PLUGIN_ROOT_ENV];
   if (existing && existing !== resolved) {
     console.warn(
