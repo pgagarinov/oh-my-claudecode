@@ -14,6 +14,8 @@ describe('omc-doctor skill (issue #2254)', () => {
     expect(content).toContain('VERSION CHECK SKIPPED: missing CLAUDE marker or plugin cache');
     expect(content).toContain('VERSION MATCH: CLAUDE and plugin cache are aligned');
     expect(content).toContain('CLAUDE-*.md');
+    expect(content).toContain('deterministic companion');
+    expect(content).toContain('scanned deterministic CLAUDE sources');
     expect(content).not.toContain('!==');
     expect(content).toContain('If `CLAUDE.md OMC version` != `Latest cached plugin version`: WARN - version drift detected');
   });
