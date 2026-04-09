@@ -240,6 +240,11 @@ Final draft.`);
         expect(result).toEqual([]);
       });
 
+      it('should NOT detect informational mode/now phrasing', () => {
+        expect(detectKeywordsWithType('What is autopilot mode now?')).toEqual([]);
+        expect(detectKeywordsWithType('what is ralph mode now?')).toEqual([]);
+      });
+
       it('should NOT detect informational Japanese questions about ralplan', () => {
         const result = detectKeywordsWithType('ralplan とは？ 使い方を教えて');
         expect(result).toEqual([]);
@@ -275,6 +280,27 @@ Final draft.`);
 
         const ralphResult = detectKeywordsWithType('랄프 기능으로 끝까지 진행해줘');
         expect(ralphResult.find((r) => r.type === 'ralph')).toBeDefined();
+      });
+
+      it('should NOT detect diagnostic mentions of keywords as activation requests', () => {
+        expect(detectKeywordsWithType('ralph keeps looping, investigate')).toEqual([]);
+        expect(detectKeywordsWithType("there's an issue with ultrawork")).toEqual([]);
+        expect(detectKeywordsWithType('autopilot has a bug in this repo')).toEqual([]);
+        expect(detectKeywordsWithType('ralph-loop이 자꾸 재실행되는 문제가 있어. 점검해줘')).toEqual([]);
+      });
+
+      it('should still detect explicit activation requests that mention bug/issue context', () => {
+        const autopilot = detectKeywordsWithType('use autopilot to fix bug in payments');
+        expect(autopilot.find((r) => r.type === 'autopilot')).toBeDefined();
+
+        const ralph = detectKeywordsWithType('run ralph on issue in parser module');
+        expect(ralph.find((r) => r.type === 'ralph')).toBeDefined();
+
+        const autopilotIssue = detectKeywordsWithType('fix issue with autopilot in parser module');
+        expect(autopilotIssue.find((r) => r.type === 'autopilot')).toBeDefined();
+
+        const ralphProblem = detectKeywordsWithType('investigate problem with ralph state');
+        expect(ralphProblem.find((r) => r.type === 'ralph')).toBeDefined();
       });
 
       it('should NOT detect "don\'t stop" phrase', () => {
