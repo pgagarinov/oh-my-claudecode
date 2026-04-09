@@ -7949,10 +7949,10 @@ var init_version = __esm({
 });
 
 // src/utils/resolve-node.ts
+function isKnownEphemeralNodePath(nodePath) {
+  return EPHEMERAL_NODE_PATH_MARKERS.some((marker) => nodePath.includes(marker));
+}
 function resolveNodeBinary() {
-  if (process.execPath && (0, import_fs34.existsSync)(process.execPath)) {
-    return process.execPath;
-  }
   try {
     const cmd = process.platform === "win32" ? "where node" : "which node";
     const result = (0, import_child_process12.execSync)(cmd, { encoding: "utf-8", stdio: "pipe" }).trim().split("\n")[0].trim();
@@ -7960,6 +7960,9 @@ function resolveNodeBinary() {
       return result;
     }
   } catch {
+  }
+  if (process.execPath && (0, import_fs34.existsSync)(process.execPath) && !isKnownEphemeralNodePath(process.execPath)) {
+    return process.execPath;
   }
   if (process.platform === "win32") {
     return "node";
@@ -8010,7 +8013,7 @@ function pickLatestVersion(versions) {
     return 0;
   })[0];
 }
-var import_fs34, import_child_process12, import_path46, import_os9;
+var import_fs34, import_child_process12, import_path46, import_os9, EPHEMERAL_NODE_PATH_MARKERS;
 var init_resolve_node = __esm({
   "src/utils/resolve-node.ts"() {
     "use strict";
@@ -8018,6 +8021,7 @@ var init_resolve_node = __esm({
     import_child_process12 = require("child_process");
     import_path46 = require("path");
     import_os9 = require("os");
+    EPHEMERAL_NODE_PATH_MARKERS = ["hostedtoolcache", "/runner/", "\\runner\\"];
   }
 });
 
@@ -83945,9 +83949,13 @@ function resolveMissionRepoRoot(missionDir) {
     stdio: ["ignore", "pipe", "pipe"]
   }).trim();
 }
+function tmuxEnv() {
+  const { TMUX: _, ...env2 } = process.env;
+  return env2;
+}
 function assertTmuxSessionAvailable(sessionName2) {
   try {
-    (0, import_child_process41.execFileSync)("tmux", ["has-session", "-t", sessionName2], { stdio: "ignore" });
+    (0, import_child_process41.execFileSync)("tmux", ["has-session", "-t", sessionName2], { stdio: "ignore", env: tmuxEnv() });
   } catch {
     throw new Error(
       `tmux session "${sessionName2}" did not stay available after launch. Check the mission command, login-shell environment, and tmux logs, then try again.`
@@ -83960,7 +83968,7 @@ function spawnAutoresearchTmux(missionDir, slug) {
   }
   const sessionName2 = `omc-autoresearch-${slug}`;
   try {
-    (0, import_child_process41.execFileSync)("tmux", ["has-session", "-t", sessionName2], { stdio: "ignore" });
+    (0, import_child_process41.execFileSync)("tmux", ["has-session", "-t", sessionName2], { stdio: "ignore", env: tmuxEnv() });
     throw new Error(
       `tmux session "${sessionName2}" already exists.
   Attach: tmux attach -t ${sessionName2}
@@ -83976,7 +83984,7 @@ function spawnAutoresearchTmux(missionDir, slug) {
   const omcPath = (0, import_path119.resolve)((0, import_path119.join)(__dirname, "..", "..", "bin", "omc.js"));
   const command = buildTmuxShellCommand(process.execPath, [omcPath, "autoresearch", missionDir]);
   const wrappedCommand = wrapWithLoginShell(command);
-  (0, import_child_process41.execFileSync)("tmux", ["new-session", "-d", "-s", sessionName2, "-c", repoRoot, wrappedCommand], { stdio: "ignore" });
+  (0, import_child_process41.execFileSync)("tmux", ["new-session", "-d", "-s", sessionName2, "-c", repoRoot, wrappedCommand], { stdio: "ignore", env: tmuxEnv() });
   assertTmuxSessionAvailable(sessionName2);
   console.log("\nAutoresearch launched in background tmux session.");
   console.log(`  Session:  ${sessionName2}`);
@@ -84026,12 +84034,12 @@ function spawnAutoresearchSetupTmux(repoRoot) {
   const paneId = (0, import_child_process41.execFileSync)(
     "tmux",
     ["new-session", "-d", "-P", "-F", "#{pane_id}", "-s", sessionName2, "-c", repoRoot, wrappedClaudeCommand],
-    { encoding: "utf-8" }
+    { encoding: "utf-8", env: tmuxEnv() }
   ).trim();
   assertTmuxSessionAvailable(sessionName2);
   if (paneId) {
-    (0, import_child_process41.execFileSync)("tmux", ["send-keys", "-t", paneId, "-l", buildAutoresearchSetupSlashCommand()], { stdio: "ignore" });
-    (0, import_child_process41.execFileSync)("tmux", ["send-keys", "-t", paneId, "Enter"], { stdio: "ignore" });
+    (0, import_child_process41.execFileSync)("tmux", ["send-keys", "-t", paneId, "-l", buildAutoresearchSetupSlashCommand()], { stdio: "ignore", env: tmuxEnv() });
+    (0, import_child_process41.execFileSync)("tmux", ["send-keys", "-t", paneId, "Enter"], { stdio: "ignore", env: tmuxEnv() });
   }
   console.log("\nAutoresearch setup launched in background Claude session.");
   console.log(`  Session:  ${sessionName2}`);

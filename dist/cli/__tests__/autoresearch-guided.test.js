@@ -376,7 +376,7 @@ describe('spawnAutoresearchSetupTmux', () => {
             expect(buildTmuxShellCommandMock).toHaveBeenCalledWith('env', [`CODEX_HOME=${repo}/.omx/tmp/omc-autoresearch-setup-kf12oi/codex-home`, 'claude', '--dangerously-skip-permissions']);
             expect(wrapWithLoginShellMock).toHaveBeenCalledWith(`env CODEX_HOME=${repo}/.omx/tmp/omc-autoresearch-setup-kf12oi/codex-home claude --dangerously-skip-permissions`);
             expect(buildAutoresearchSetupSlashCommand()).toBe('/deep-interview --autoresearch');
-            expect(vi.mocked(execFileSync)).toHaveBeenCalledWith('tmux', ['send-keys', '-t', '%42', '-l', buildAutoresearchSetupSlashCommand()], { stdio: 'ignore' });
+            expect(vi.mocked(execFileSync)).toHaveBeenCalledWith('tmux', ['send-keys', '-t', '%42', '-l', buildAutoresearchSetupSlashCommand()], expect.objectContaining({ stdio: 'ignore' }));
             expect(logSpy).toHaveBeenCalledWith('\nAutoresearch setup launched in background Claude session.');
             expect(logSpy).toHaveBeenCalledWith('  Attach:   tmux attach -t omc-autoresearch-setup-kf12oi');
             expect(hasSessionCalls).toBe(1);
