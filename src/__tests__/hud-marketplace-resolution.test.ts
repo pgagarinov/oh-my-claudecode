@@ -146,6 +146,7 @@ describe('HUD marketplace resolution', () => {
         CLAUDE_CONFIG_DIR: configDir,
         HOME: fakeHome,
         OMC_PLUGIN_ROOT: pluginRoot,
+        OMC_HUD_DISABLE_NPM_FALLBACK: '1',
       },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
