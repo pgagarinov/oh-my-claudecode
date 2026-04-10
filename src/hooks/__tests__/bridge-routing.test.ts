@@ -1128,7 +1128,7 @@ Read src/hooks/bridge.ts first.`,
     });
 
     it('surfaces blocker details in autopilot hook output', async () => {
-      const testDir = '/tmp/omc-issue-2467-autopilot-stall';
+      const testDir = process.cwd();
       try {
         const sessionId = 'autopilot-blockers-session';
         const sessionDir = join(testDir, '.omc', 'state', 'sessions', sessionId);
