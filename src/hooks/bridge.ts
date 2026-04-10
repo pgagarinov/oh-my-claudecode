@@ -1148,8 +1148,10 @@ async function processPersistentMode(input: HookInput): Promise<HookOutput> {
         // Per-session cooldown: prevent notification spam when the session idles repeatedly.
         // Uses session-scoped state so one session does not suppress another.
         const stateDir = join(getOmcRoot(directory), "state");
-        if (shouldSendIdleNotification(stateDir, sessionId)) {
-          recordIdleNotificationSent(stateDir, sessionId);
+        const { getIdleNotificationRepoState } = await import("./persistent-mode/idle-repo-state.js");
+        const idleRepoState = getIdleNotificationRepoState(directory);
+        if (shouldSendIdleNotification(stateDir, sessionId, idleRepoState)) {
+          recordIdleNotificationSent(stateDir, sessionId, idleRepoState);
           const logSessionIdleNotifyFailure = createSwallowedErrorLogger(
             'hooks.bridge session-idle notification failed',
           );

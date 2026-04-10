@@ -28,6 +28,9 @@ describe("idle notification cooldown (issue #842)", () => {
   });
 
   describe("shouldSendIdleNotification", () => {
+    const zeroBacklogState = { signature: "repo-zero", backlogZero: true };
+    const changedBacklogState = { signature: "repo-new", backlogZero: true };
+
     it("returns true when no cooldown file exists", () => {
       expect(shouldSendIdleNotification(stateDir)).toBe(true);
     });
@@ -78,9 +81,40 @@ describe("idle notification cooldown (issue #842)", () => {
       expect(shouldSendIdleNotification(stateDir, sessionId)).toBe(false);
       expect(shouldSendIdleNotification(stateDir, "different-session")).toBe(true);
     });
+
+    it("suppresses repeated zero-backlog notifications when repo state has not changed", () => {
+      const cooldownPath = join(stateDir, "idle-notif-cooldown.json");
+      const past = new Date(Date.now() - 120_000).toISOString();
+      writeFileSync(
+        cooldownPath,
+        JSON.stringify({
+          lastSentAt: past,
+          repoSignature: zeroBacklogState.signature,
+          backlogZero: true,
+        })
+      );
+
+      expect(shouldSendIdleNotification(stateDir, undefined, zeroBacklogState)).toBe(false);
+    });
+
+    it("bypasses cooldown immediately when repo state changes", () => {
+      const cooldownPath = join(stateDir, "idle-notif-cooldown.json");
+      writeFileSync(
+        cooldownPath,
+        JSON.stringify({
+          lastSentAt: new Date().toISOString(),
+          repoSignature: zeroBacklogState.signature,
+          backlogZero: true,
+        })
+      );
+
+      expect(shouldSendIdleNotification(stateDir, undefined, changedBacklogState)).toBe(true);
+    });
   });
 
   describe("recordIdleNotificationSent", () => {
+    const zeroBacklogState = { signature: "repo-zero", backlogZero: true };
+
     it("creates cooldown file with lastSentAt timestamp", () => {
       const cooldownPath = join(stateDir, "idle-notif-cooldown.json");
       expect(existsSync(cooldownPath)).toBe(false);
@@ -131,6 +165,16 @@ describe("idle notification cooldown (issue #842)", () => {
 
       expect(existsSync(cooldownPath)).toBe(true);
       expect(existsSync(join(stateDir, "idle-notif-cooldown.json"))).toBe(false);
+    });
+
+    it("stores repo signature metadata when repo state is provided", () => {
+      const cooldownPath = join(stateDir, "idle-notif-cooldown.json");
+
+      recordIdleNotificationSent(stateDir, undefined, zeroBacklogState);
+
+      const data = JSON.parse(readFileSync(cooldownPath, "utf-8")) as Record<string, unknown>;
+      expect(data.repoSignature).toBe(zeroBacklogState.signature);
+      expect(data.backlogZero).toBe(true);
     });
   });
 

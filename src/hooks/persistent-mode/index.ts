@@ -51,6 +51,7 @@ import { checkAutopilot } from '../autopilot/enforcement.js';
 import { readTeamPipelineState } from '../team-pipeline/state.js';
 import type { TeamPipelinePhase } from '../team-pipeline/types.js';
 import { getActiveAgentSnapshot } from '../subagent-tracker/index.js';
+import type { IdleNotificationRepoState } from './idle-repo-state.js';
 
 export interface ToolErrorState {
   tool_name: string;
@@ -298,6 +299,12 @@ export function getIdleNotificationCooldownSeconds(): number {
   return 60;
 }
 
+interface IdleNotificationCooldownRecord {
+  lastSentAt?: string;
+  repoSignature?: string;
+  backlogZero?: boolean;
+}
+
 function getIdleNotificationCooldownPath(stateDir: string, sessionId?: string): string {
   // Keep session segments filesystem-safe; fall back to legacy global path otherwise.
   if (sessionId && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/.test(sessionId)) {
@@ -310,15 +317,29 @@ function getIdleNotificationCooldownPath(stateDir: string, sessionId?: string): 
  * Check whether the session-idle notification cooldown has elapsed.
  * Returns true if the notification should be sent.
  */
-export function shouldSendIdleNotification(stateDir: string, sessionId?: string): boolean {
+export function shouldSendIdleNotification(
+  stateDir: string,
+  sessionId?: string,
+  repoState?: IdleNotificationRepoState | null,
+): boolean {
   const cooldownSecs = getIdleNotificationCooldownSeconds();
-  if (cooldownSecs === 0) return true; // cooldown disabled
 
   const cooldownPath = getIdleNotificationCooldownPath(stateDir, sessionId);
   try {
     if (!existsSync(cooldownPath)) return true;
-    const data = JSON.parse(readFileSync(cooldownPath, 'utf-8')) as Record<string, unknown>;
-    if (data?.lastSentAt && typeof data.lastSentAt === 'string') {
+    const data = JSON.parse(readFileSync(cooldownPath, 'utf-8')) as IdleNotificationCooldownRecord;
+    if (repoState && typeof data.repoSignature === 'string') {
+      if (data.repoSignature !== repoState.signature) {
+        return true;
+      }
+      if (data.backlogZero === true && repoState.backlogZero) {
+        return false;
+      }
+    }
+
+    if (cooldownSecs === 0) return true; // cooldown disabled
+
+    if (typeof data.lastSentAt === 'string') {
       const elapsed = (Date.now() - new Date(data.lastSentAt).getTime()) / 1000;
       if (Number.isFinite(elapsed) && elapsed < cooldownSecs) return false;
     }
@@ -331,10 +352,21 @@ export function shouldSendIdleNotification(stateDir: string, sessionId?: string)
 /**
  * Record that the session-idle notification was sent at the current timestamp.
  */
-export function recordIdleNotificationSent(stateDir: string, sessionId?: string): void {
+export function recordIdleNotificationSent(
+  stateDir: string,
+  sessionId?: string,
+  repoState?: IdleNotificationRepoState | null,
+): void {
   const cooldownPath = getIdleNotificationCooldownPath(stateDir, sessionId);
   try {
-    atomicWriteJsonSync(cooldownPath, { lastSentAt: new Date().toISOString() });
+    const record: IdleNotificationCooldownRecord = {
+      lastSentAt: new Date().toISOString(),
+    };
+    if (repoState) {
+      record.repoSignature = repoState.signature;
+      record.backlogZero = repoState.backlogZero;
+    }
+    atomicWriteJsonSync(cooldownPath, record);
   } catch {
     // ignore write errors
   }

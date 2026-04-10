@@ -220,6 +220,9 @@ describe('getIdleNotificationCooldownSeconds', () => {
 });
 
 describe('shouldSendIdleNotification', () => {
+  const zeroBacklogState = { signature: 'repo-zero', backlogZero: true };
+  const changedBacklogState = { signature: 'repo-new', backlogZero: true };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -388,9 +391,51 @@ describe('shouldSendIdleNotification', () => {
     // Negative cooldown clamped to 0 → treated as disabled → should send
     expect(shouldSendIdleNotification(TEST_STATE_DIR)).toBe(true);
   });
+
+  it('suppresses repeated zero-backlog nudges even after cooldown expires when repo state is unchanged', () => {
+    const oldTimestamp = new Date(Date.now() - 90_000).toISOString();
+    (existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => {
+      if (p === COOLDOWN_PATH) return true;
+      return false;
+    });
+    (readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => {
+      if (p === COOLDOWN_PATH) {
+        return JSON.stringify({
+          lastSentAt: oldTimestamp,
+          repoSignature: zeroBacklogState.signature,
+          backlogZero: true,
+        });
+      }
+      throw new Error('not found');
+    });
+
+    expect(shouldSendIdleNotification(TEST_STATE_DIR, undefined, zeroBacklogState)).toBe(false);
+  });
+
+  it('allows immediate idle notification when repo state changes even inside cooldown', () => {
+    const recentTimestamp = new Date(Date.now() - 5_000).toISOString();
+    (existsSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => {
+      if (p === COOLDOWN_PATH) return true;
+      return false;
+    });
+    (readFileSync as ReturnType<typeof vi.fn>).mockImplementation((p: string) => {
+      if (p === COOLDOWN_PATH) {
+        return JSON.stringify({
+          lastSentAt: recentTimestamp,
+          repoSignature: zeroBacklogState.signature,
+          backlogZero: true,
+        });
+      }
+      throw new Error('not found');
+    });
+
+    expect(shouldSendIdleNotification(TEST_STATE_DIR, undefined, changedBacklogState)).toBe(true);
+  });
 });
 
 describe('recordIdleNotificationSent', () => {
+  const zeroBacklogState = { signature: 'repo-zero', backlogZero: true };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -424,6 +469,19 @@ describe('recordIdleNotificationSent', () => {
     expect(atomicWriteJsonSync).toHaveBeenCalledOnce();
     const [calledPath] = (atomicWriteJsonSync as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(calledPath).toBe(COOLDOWN_PATH);
+  });
+
+  it('persists repo signature metadata when repo state is provided', () => {
+    recordIdleNotificationSent(TEST_STATE_DIR, undefined, zeroBacklogState);
+
+    expect(atomicWriteJsonSync).toHaveBeenCalledWith(
+      COOLDOWN_PATH,
+      expect.objectContaining({
+        lastSentAt: expect.any(String),
+        repoSignature: zeroBacklogState.signature,
+        backlogZero: true,
+      }),
+    );
   });
 
   it('does not throw when atomicWriteJsonSync fails', () => {
