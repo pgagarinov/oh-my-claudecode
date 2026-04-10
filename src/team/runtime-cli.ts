@@ -44,6 +44,14 @@ interface CliOutput {
   workerCount: number;
 }
 
+export type TerminalPhaseResult = 'complete' | 'failed' | 'cancelled';
+
+export interface TerminalCliResult {
+  output: CliOutput;
+  exitCode: number;
+  notice: string;
+}
+
 interface WatchdogFailedMarker {
   failedAt: string | number;
 }
@@ -127,6 +135,39 @@ export async function writeResultArtifact(
     'utf-8',
   );
   await rename(tmpPath, resultPath);
+}
+
+export function buildCliOutput(
+  stateRoot: string,
+  teamName: string,
+  status: 'completed' | 'failed',
+  workerCount: number,
+  startTimeMs: number,
+): CliOutput {
+  const taskResults = collectTaskResults(stateRoot);
+  const duration = (Date.now() - startTimeMs) / 1000;
+  return {
+    status,
+    teamName,
+    taskResults,
+    duration,
+    workerCount,
+  };
+}
+
+export function buildTerminalCliResult(
+  stateRoot: string,
+  teamName: string,
+  phase: TerminalPhaseResult,
+  workerCount: number,
+  startTimeMs: number,
+): TerminalCliResult {
+  const status = phase === 'complete' ? 'completed' : 'failed';
+  return {
+    output: buildCliOutput(stateRoot, teamName, status, workerCount, startTimeMs),
+    exitCode: status === 'completed' ? 0 : 1,
+    notice: `[runtime-cli] phase=${phase} reached terminal state; preserving team state for inspection. Run "omc team shutdown ${teamName}" when explicit cleanup is desired.\n`,
+  };
 }
 
 async function writePanesFile(
@@ -229,10 +270,6 @@ async function main(): Promise<void> {
   let finalStatus: 'completed' | 'failed' = 'failed';
   let pollActive = true;
 
-  function exitCodeFor(status: 'completed' | 'failed'): number {
-    return status === 'completed' ? 0 : 1;
-  }
-
   async function doShutdown(status: 'completed' | 'failed'): Promise<void> {
     pollActive = false;
     finalStatus = status;
@@ -242,10 +279,7 @@ async function main(): Promise<void> {
       runtime.stopWatchdog();
     }
 
-    // 2. Collect task results (watchdog is now stopped, no more writes to tasks/)
-    const taskResults = collectTaskResults(stateRoot);
-
-    // 3. Shutdown team
+    // 2. Shutdown team
     if (runtime) {
       try {
         if (useV2) {
@@ -266,14 +300,7 @@ async function main(): Promise<void> {
       }
     }
 
-    const duration = (Date.now() - startTime) / 1000;
-    const output: CliOutput = {
-      status: finalStatus,
-      teamName,
-      taskResults,
-      duration,
-      workerCount,
-    };
+    const output = buildCliOutput(stateRoot, teamName, finalStatus, workerCount, startTime);
     const finishedAt = new Date().toISOString();
 
     try {
@@ -282,11 +309,20 @@ async function main(): Promise<void> {
       process.stderr.write(`[runtime-cli] Failed to persist result artifact: ${err}\n`);
     }
 
-    // 4. Write result to stdout
+    // 3. Write result to stdout
     process.stdout.write(JSON.stringify(output) + '\n');
 
-    // 5. Exit
-    process.exit(exitCodeFor(status));
+    // 4. Exit
+    process.exit(status === 'completed' ? 0 : 1);
+  }
+
+  function exitWithoutShutdown(phase: TerminalPhaseResult): void {
+    pollActive = false;
+    finalStatus = phase === 'complete' ? 'completed' : 'failed';
+    const result = buildTerminalCliResult(stateRoot, teamName, phase, workerCount, startTime);
+    process.stderr.write(result.notice);
+    process.stdout.write(JSON.stringify(result.output) + '\n');
+    process.exit(result.exitCode);
   }
 
   // Register signal handlers before poll loop
@@ -423,6 +459,16 @@ async function main(): Promise<void> {
       }
       mismatchStreak = 0;
 
+      if (snap.phase === 'completed') {
+        exitWithoutShutdown('complete');
+        return;
+      }
+
+      if (snap.phase === 'failed') {
+        exitWithoutShutdown('failed');
+        return;
+      }
+
       if (snap.allTasksTerminal) {
         const hasFailures = snap.tasks.failed > 0;
         if (!hasFailures) {
@@ -438,13 +484,13 @@ async function main(): Promise<void> {
             process.stderr.write(
               `[runtime-cli/v2] Sentinel gate blocked: ${gateResult.blockers.join('; ')}\n`,
             );
-            await doShutdown('failed');
+            exitWithoutShutdown('failed');
             return;
           }
-          await doShutdown('completed');
+          exitWithoutShutdown('complete');
         } else {
           process.stderr.write('[runtime-cli/v2] Terminal failure detected from task counts\n');
-          await doShutdown('failed');
+          exitWithoutShutdown('failed');
         }
         return;
       }
@@ -549,7 +595,7 @@ async function main(): Promise<void> {
 
     if (deadWorkerFailure || fixingWithNoWorkers) {
       process.stderr.write(`[runtime-cli] Failure detected: deadWorkerFailure=${deadWorkerFailure} fixingWithNoWorkers=${fixingWithNoWorkers}\n`);
-      await doShutdown('failed');
+      exitWithoutShutdown('failed');
       return;
     }
   }
