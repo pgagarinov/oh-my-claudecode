@@ -1007,8 +1007,17 @@ async function checkRalplan(
 ): Promise<PersistentModeResult | null> {
   const workingDir = resolveToWorktreeRoot(directory);
   const state = readModeState<RalplanState>('ralplan', workingDir, sessionId);
+  const stateRecord = state as any;
+  const hasTimestampFields = Boolean(
+    stateRecord &&
+    ['last_checked_at', 'updated_at', 'started_at'].some((key) =>
+      typeof stateRecord[key] === 'string' && String(stateRecord[key]).length > 0,
+    ),
+  );
 
-  if (!state || !state.active || isStaleState(state)) {
+  // Session-scoped ralplan state can legitimately omit timestamps in CI.
+  // Only apply stale-state suppression when a freshness timestamp exists.
+  if (!state || !state.active || (hasTimestampFields && isStaleState(state))) {
     return null;
   }
 
