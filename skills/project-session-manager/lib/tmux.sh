@@ -33,24 +33,46 @@ psm_create_tmux_session() {
     return 0
 }
 
-# Launch Claude Code in tmux session, optionally injecting a context file prompt.
-# Usage: psm_launch_claude <session_name> [context_file_relative_path]
-# context_file_relative_path: path relative to the worktree root (e.g. .psm/review.md)
+# Launch Claude Code in tmux session, optionally injecting either a context-file
+# trigger prompt or a literal initial prompt.
+# Usage: psm_launch_claude <session_name> [initial_context]
+# initial_context may be either:
+#   - a path relative to the worktree root (e.g. .psm/review.md), or
+#   - a literal prompt string to send after Claude boots.
+#
+# Passes --dangerously-skip-permissions so the session does not stall on
+# directory-trust or repeated tool-approval prompts (issue #2508).
+# Set PSM_CLAUDE_STARTUP_DELAY (default: 5s) to tune literal-prompt delivery.
 psm_launch_claude() {
     local session_name="$1"
-    local context_file="${2:-}"
+    local initial_context="${2:-}"
 
     if ! tmux has-session -t "$session_name" 2>/dev/null; then
         echo "error|Session not found: $session_name"
         return 1
     fi
 
-    # Send claude command to the session
-    tmux send-keys -t "$session_name" "claude" Enter
+    # --dangerously-skip-permissions bypasses both the directory-trust prompt and
+    # every per-tool approval prompt. Without this flag, unattended PSM sessions
+    # can block indefinitely on the first tool call (issue #2508).
+    tmux send-keys -t "$session_name" "claude --dangerously-skip-permissions" Enter
 
-    # Inject initial task context once Claude's REPL is ready
-    if [[ -n "$context_file" ]]; then
-        psm_inject_prompt "$session_name" "$context_file"
+    if [[ -n "$initial_context" ]]; then
+        local session_path=""
+        session_path=$(tmux display-message -p -t "$session_name" '#{pane_current_path}' 2>/dev/null || true)
+
+        # If the second arg resolves to a file in the worktree, preserve the
+        # existing context-file flow. Otherwise treat it as a literal prompt.
+        if [[ -n "$session_path" && -f "$session_path/$initial_context" ]]; then
+            psm_inject_prompt "$session_name" "$initial_context"
+        else
+            local startup_delay="${PSM_CLAUDE_STARTUP_DELAY:-5}"
+            (
+                sleep "$startup_delay"
+                tmux send-keys -t "$session_name" -l -- "$initial_context" 2>/dev/null || true
+                tmux send-keys -t "$session_name" Enter 2>/dev/null || true
+            ) &
+        fi
     fi
 
     echo "launched|$session_name"
