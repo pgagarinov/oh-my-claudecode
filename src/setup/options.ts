@@ -422,6 +422,15 @@ const presetSchema = z
       })
       .optional(),
     starRepo: z.boolean().optional(),
+    // HUD element config. Mirrors SetupOptions.hud — the only shape
+    // `dumpSafeDefaultsAsJson()` writes. `elements` is a free-form record
+    // of HUD component → partial config (theme, position, etc.), preserved
+    // as-is when round-tripping dump → tweak → --preset.
+    hud: z
+      .object({
+        elements: z.record(z.unknown()).optional(),
+      })
+      .optional(),
   })
   .passthrough(); // extra unknown fields are preserved, not rejected
 
@@ -586,6 +595,17 @@ function presetToPartial(preset: PresetFile): Partial<SetupOptions> {
     out.teams = { ...DEFAULTS.teams, ...preset.teams };
   }
   if (preset.starRepo !== undefined) out.starRepo = preset.starRepo;
+  // HUD round-trip. `dumpSafeDefaultsAsJson` emits `hud.elements`; without
+  // this copy, `omc setup --preset <dumped>` silently drops the statusline
+  // config and ends up shallower than the bare safe-defaults path. The
+  // schema accepts an unknown record so new `HudElementConfig` fields
+  // round-trip without needing a preset-schema bump; cast to the typed
+  // shape at the boundary.
+  if (preset.hud && preset.hud.elements) {
+    out.hud = {
+      elements: preset.hud.elements as Partial<HudElementConfig>,
+    };
+  }
   return out;
 }
 

@@ -542,21 +542,32 @@ export function cleanupStaleAgents(log: (msg: string) => void): string[] {
  * appear twice. Removes standalone copies with OMC frontmatter whose
  * filename matches a current package agent.
  */
-export function prunePluginDuplicateAgents(log: (msg: string) => void): string[] {
-  if (!existsSync(AGENTS_DIR)) return [];
+export function prunePluginDuplicateAgents(
+  log: (msg: string) => void,
+  opts?: { configDir?: string },
+): string[] {
+  // Honor configDir override so embedded / programmatic flows that pass a
+  // non-default configDir (and whose preview via
+  // previewStandaloneDuplicatesForPluginMode uses the same override) prune
+  // the SAME profile that was previewed. Without this, the preview would
+  // target <override>/agents but the execute would target the module-level
+  // AGENTS_DIR — at best the requested profile is left uncleaned, at worst
+  // files are deleted in the wrong one.
+  const agentsDir = opts?.configDir ? join(opts.configDir, 'agents') : AGENTS_DIR;
+  if (!existsSync(agentsDir)) return [];
 
   const currentAgentFiles = new Set(
     Object.keys(loadAgentDefinitions()),
   );
 
   const removed: string[] = [];
-  for (const file of readdirSync(AGENTS_DIR)) {
+  for (const file of readdirSync(agentsDir)) {
     if (!file.endsWith('.md')) continue;
     if (file === 'AGENTS.md') continue;
     // Only prune agents whose name matches a current package agent
     if (!currentAgentFiles.has(file)) continue;
 
-    const filepath = join(AGENTS_DIR, file);
+    const filepath = join(agentsDir, file);
     try {
       const content = readFileSync(filepath, 'utf-8');
       if (content.startsWith('---\n') && /^name:\s+\S+/m.test(content)) {
@@ -634,8 +645,13 @@ export function cleanupStaleSkills(log: (msg: string) => void): string[] {
  * content-hashes match any installed plugin version, preserving user-authored
  * skills that happen to share a name.
  */
-export function prunePluginDuplicateSkills(log: (msg: string) => void): string[] {
-  if (!existsSync(SKILLS_DIR)) return [];
+export function prunePluginDuplicateSkills(
+  log: (msg: string) => void,
+  opts?: { configDir?: string },
+): string[] {
+  // See prunePluginDuplicateAgents above for the configDir override rationale.
+  const skillsDir = opts?.configDir ? join(opts.configDir, 'skills') : SKILLS_DIR;
+  if (!existsSync(skillsDir)) return [];
 
   const packageSkillsDir = join(getPackageDir(), 'skills');
   if (!existsSync(packageSkillsDir)) return [];
@@ -662,14 +678,14 @@ export function prunePluginDuplicateSkills(log: (msg: string) => void): string[]
   }
 
   const removed: string[] = [];
-  for (const entry of readdirSync(SKILLS_DIR, { withFileTypes: true })) {
+  for (const entry of readdirSync(skillsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     if (entry.name === 'omc-learned' || entry.name === '.omc-trash') continue;
 
     // Only prune skills whose name matches a plugin-provided skill
     if (!pluginSkillNames.has(entry.name)) continue;
 
-    const skillMdPath = join(SKILLS_DIR, entry.name, 'SKILL.md');
+    const skillMdPath = join(skillsDir, entry.name, 'SKILL.md');
     if (!existsSync(skillMdPath)) continue;
 
     try {
@@ -682,7 +698,7 @@ export function prunePluginDuplicateSkills(log: (msg: string) => void): string[]
       const isOmcCreated = standaloneContent.startsWith('---\n') && /^name:\s+\S+/m.test(standaloneContent);
 
       if (pluginContent === standaloneContent || isOmcCreated) {
-        rmSync(join(SKILLS_DIR, entry.name), { recursive: true, force: true });
+        rmSync(join(skillsDir, entry.name), { recursive: true, force: true });
         removed.push(entry.name);
         log(`  Pruned plugin-duplicate skill: ${entry.name}/`);
       }
@@ -702,12 +718,17 @@ export function prunePluginDuplicateSkills(log: (msg: string) => void): string[]
  *
  * Returns the list of absolute paths that were removed.
  */
-export function prunePluginDuplicateHooks(log: (msg: string) => void): string[] {
+export function prunePluginDuplicateHooks(
+  log: (msg: string) => void,
+  opts?: { configDir?: string },
+): string[] {
+  // See prunePluginDuplicateAgents above for the configDir override rationale.
+  const hooksDir = opts?.configDir ? join(opts.configDir, 'hooks') : HOOKS_DIR;
   const removed: string[] = [];
-  if (!existsSync(HOOKS_DIR)) return removed;
+  if (!existsSync(hooksDir)) return removed;
 
   for (const filename of OMC_HOOK_FILENAMES) {
-    const targetPath = join(HOOKS_DIR, filename);
+    const targetPath = join(hooksDir, filename);
     if (existsSync(targetPath)) {
       try {
         unlinkSync(targetPath);
@@ -720,7 +741,7 @@ export function prunePluginDuplicateHooks(log: (msg: string) => void): string[] 
   }
 
   // Also prune hooks/lib/ files that were installed by ensureStandaloneHookScripts
-  const hooksLibDir = join(HOOKS_DIR, 'lib');
+  const hooksLibDir = join(hooksDir, 'lib');
   if (existsSync(hooksLibDir)) {
     const libFilenames = [
       'atomic-write.mjs',
@@ -746,7 +767,7 @@ export function prunePluginDuplicateHooks(log: (msg: string) => void): string[] 
   }
 
   // Prune find-node.sh if present
-  const findNodePath = join(HOOKS_DIR, 'find-node.sh');
+  const findNodePath = join(hooksDir, 'find-node.sh');
   if (existsSync(findNodePath)) {
     try {
       unlinkSync(findNodePath);
@@ -754,10 +775,10 @@ export function prunePluginDuplicateHooks(log: (msg: string) => void): string[] 
     } catch { /* ignore */ }
   }
 
-  // Remove HOOKS_DIR if empty
+  // Remove hooksDir if empty
   try {
-    if (existsSync(HOOKS_DIR) && readdirSync(HOOKS_DIR).length === 0) {
-      rmdirSync(HOOKS_DIR);
+    if (existsSync(hooksDir) && readdirSync(hooksDir).length === 0) {
+      rmdirSync(hooksDir);
     }
   } catch { /* ignore */ }
 
@@ -958,15 +979,15 @@ export function pruneStandaloneDuplicatesForPluginMode(
   };
 
   if (hasPluginProvidedAgentFiles()) {
-    result.prunedAgents = prunePluginDuplicateAgents(log);
+    result.prunedAgents = prunePluginDuplicateAgents(log, opts);
   }
 
   if (hasPluginProvidedSkillFiles()) {
-    result.prunedSkills = prunePluginDuplicateSkills(log);
+    result.prunedSkills = prunePluginDuplicateSkills(log, opts);
   }
 
   if (hasPluginProvidedHookFiles()) {
-    result.prunedHooks = prunePluginDuplicateHooks(log);
+    result.prunedHooks = prunePluginDuplicateHooks(log, opts);
 
     // Strip OMC hook entries from settings.json so they don't duplicate
     // the plugin's hooks.json delivery.

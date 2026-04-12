@@ -9517,17 +9517,18 @@ function cleanupStaleAgents(log3) {
   }
   return removed;
 }
-function prunePluginDuplicateAgents(log3) {
-  if (!(0, import_fs36.existsSync)(AGENTS_DIR)) return [];
+function prunePluginDuplicateAgents(log3, opts) {
+  const agentsDir = opts?.configDir ? (0, import_path48.join)(opts.configDir, "agents") : AGENTS_DIR;
+  if (!(0, import_fs36.existsSync)(agentsDir)) return [];
   const currentAgentFiles = new Set(
     Object.keys(loadAgentDefinitions())
   );
   const removed = [];
-  for (const file of (0, import_fs36.readdirSync)(AGENTS_DIR)) {
+  for (const file of (0, import_fs36.readdirSync)(agentsDir)) {
     if (!file.endsWith(".md")) continue;
     if (file === "AGENTS.md") continue;
     if (!currentAgentFiles.has(file)) continue;
-    const filepath = (0, import_path48.join)(AGENTS_DIR, file);
+    const filepath = (0, import_path48.join)(agentsDir, file);
     try {
       const content = (0, import_fs36.readFileSync)(filepath, "utf-8");
       if (content.startsWith("---\n") && /^name:\s+\S+/m.test(content)) {
@@ -9578,8 +9579,9 @@ function cleanupStaleSkills(log3) {
   }
   return removed;
 }
-function prunePluginDuplicateSkills(log3) {
-  if (!(0, import_fs36.existsSync)(SKILLS_DIR)) return [];
+function prunePluginDuplicateSkills(log3, opts) {
+  const skillsDir = opts?.configDir ? (0, import_path48.join)(opts.configDir, "skills") : SKILLS_DIR;
+  if (!(0, import_fs36.existsSync)(skillsDir)) return [];
   const packageSkillsDir = (0, import_path48.join)(getPackageDir3(), "skills");
   if (!(0, import_fs36.existsSync)(packageSkillsDir)) return [];
   const pluginSkillNames = /* @__PURE__ */ new Set();
@@ -9598,18 +9600,18 @@ function prunePluginDuplicateSkills(log3) {
     }
   }
   const removed = [];
-  for (const entry of (0, import_fs36.readdirSync)(SKILLS_DIR, { withFileTypes: true })) {
+  for (const entry of (0, import_fs36.readdirSync)(skillsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     if (entry.name === "omc-learned" || entry.name === ".omc-trash") continue;
     if (!pluginSkillNames.has(entry.name)) continue;
-    const skillMdPath = (0, import_path48.join)(SKILLS_DIR, entry.name, "SKILL.md");
+    const skillMdPath = (0, import_path48.join)(skillsDir, entry.name, "SKILL.md");
     if (!(0, import_fs36.existsSync)(skillMdPath)) continue;
     try {
       const standaloneContent = (0, import_fs36.readFileSync)(skillMdPath, "utf-8").trim();
       const pluginContent = pluginSkillHashes.get(entry.name);
       const isOmcCreated = standaloneContent.startsWith("---\n") && /^name:\s+\S+/m.test(standaloneContent);
       if (pluginContent === standaloneContent || isOmcCreated) {
-        (0, import_fs36.rmSync)((0, import_path48.join)(SKILLS_DIR, entry.name), { recursive: true, force: true });
+        (0, import_fs36.rmSync)((0, import_path48.join)(skillsDir, entry.name), { recursive: true, force: true });
         removed.push(entry.name);
         log3(`  Pruned plugin-duplicate skill: ${entry.name}/`);
       }
@@ -9618,11 +9620,12 @@ function prunePluginDuplicateSkills(log3) {
   }
   return removed;
 }
-function prunePluginDuplicateHooks(log3) {
+function prunePluginDuplicateHooks(log3, opts) {
+  const hooksDir = opts?.configDir ? (0, import_path48.join)(opts.configDir, "hooks") : HOOKS_DIR;
   const removed = [];
-  if (!(0, import_fs36.existsSync)(HOOKS_DIR)) return removed;
+  if (!(0, import_fs36.existsSync)(hooksDir)) return removed;
   for (const filename of OMC_HOOK_FILENAMES) {
-    const targetPath = (0, import_path48.join)(HOOKS_DIR, filename);
+    const targetPath = (0, import_path48.join)(hooksDir, filename);
     if ((0, import_fs36.existsSync)(targetPath)) {
       try {
         (0, import_fs36.unlinkSync)(targetPath);
@@ -9633,7 +9636,7 @@ function prunePluginDuplicateHooks(log3) {
       }
     }
   }
-  const hooksLibDir = (0, import_path48.join)(HOOKS_DIR, "lib");
+  const hooksLibDir = (0, import_path48.join)(hooksDir, "lib");
   if ((0, import_fs36.existsSync)(hooksLibDir)) {
     const libFilenames = [
       "atomic-write.mjs",
@@ -9658,7 +9661,7 @@ function prunePluginDuplicateHooks(log3) {
     } catch {
     }
   }
-  const findNodePath = (0, import_path48.join)(HOOKS_DIR, "find-node.sh");
+  const findNodePath = (0, import_path48.join)(hooksDir, "find-node.sh");
   if ((0, import_fs36.existsSync)(findNodePath)) {
     try {
       (0, import_fs36.unlinkSync)(findNodePath);
@@ -9667,8 +9670,8 @@ function prunePluginDuplicateHooks(log3) {
     }
   }
   try {
-    if ((0, import_fs36.existsSync)(HOOKS_DIR) && (0, import_fs36.readdirSync)(HOOKS_DIR).length === 0) {
-      (0, import_fs36.rmdirSync)(HOOKS_DIR);
+    if ((0, import_fs36.existsSync)(hooksDir) && (0, import_fs36.readdirSync)(hooksDir).length === 0) {
+      (0, import_fs36.rmdirSync)(hooksDir);
     }
   } catch {
   }
@@ -9801,13 +9804,13 @@ function pruneStandaloneDuplicatesForPluginMode(log3, opts) {
     hasWork: false
   };
   if (hasPluginProvidedAgentFiles()) {
-    result.prunedAgents = prunePluginDuplicateAgents(log3);
+    result.prunedAgents = prunePluginDuplicateAgents(log3, opts);
   }
   if (hasPluginProvidedSkillFiles()) {
-    result.prunedSkills = prunePluginDuplicateSkills(log3);
+    result.prunedSkills = prunePluginDuplicateSkills(log3, opts);
   }
   if (hasPluginProvidedHookFiles()) {
-    result.prunedHooks = prunePluginDuplicateHooks(log3);
+    result.prunedHooks = prunePluginDuplicateHooks(log3, opts);
     const settingsPath = opts?.configDir ? (0, import_path48.join)(opts.configDir, "settings.json") : SETTINGS_FILE;
     if ((0, import_fs36.existsSync)(settingsPath)) {
       try {
@@ -81656,7 +81659,14 @@ var presetSchema = external_exports.object({
     agentCount: external_exports.union([external_exports.literal(2), external_exports.literal(3), external_exports.literal(5)]).optional(),
     agentType: external_exports.enum(["executor", "debugger", "designer"]).optional()
   }).optional(),
-  starRepo: external_exports.boolean().optional()
+  starRepo: external_exports.boolean().optional(),
+  // HUD element config. Mirrors SetupOptions.hud — the only shape
+  // `dumpSafeDefaultsAsJson()` writes. `elements` is a free-form record
+  // of HUD component → partial config (theme, position, etc.), preserved
+  // as-is when round-tripping dump → tweak → --preset.
+  hud: external_exports.object({
+    elements: external_exports.record(external_exports.unknown()).optional()
+  }).optional()
 }).passthrough();
 function readEnvPartial(env2 = process.env) {
   const out = {};
@@ -81764,6 +81774,11 @@ function presetToPartial(preset) {
     out.teams = { ...DEFAULTS2.teams, ...preset.teams };
   }
   if (preset.starRepo !== void 0) out.starRepo = preset.starRepo;
+  if (preset.hud && preset.hud.elements) {
+    out.hud = {
+      elements: preset.hud.elements
+    };
+  }
   return out;
 }
 function parseMcpServersList(list) {
