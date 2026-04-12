@@ -9,6 +9,11 @@ vi.mock("../../notifications/tmux.js", () => ({
   getCurrentTmuxSession: () => mockGetCurrentTmuxSession(),
 }));
 
+const mockGetNewPaneTail = vi.fn<(paneId: string, stateDir: string, maxLines?: number) => string>(() => "");
+vi.mock("../../features/rate-limit-wait/pane-fresh-capture.js", () => ({
+  getNewPaneTail: (paneId: string, stateDir: string, maxLines?: number) => mockGetNewPaneTail(paneId, stateDir, maxLines),
+}));
+
 // Mock config and dispatcher modules
 vi.mock("../config.js", () => ({
   getOpenClawConfig: vi.fn(),
@@ -65,6 +70,7 @@ describe("wakeOpenClaw", () => {
       statusCode: 200,
     });
     mockGetCurrentTmuxSession.mockReturnValue(null);
+    mockGetNewPaneTail.mockReturnValue("");
   });
 
   afterEach(() => {
@@ -104,6 +110,40 @@ describe("wakeOpenClaw", () => {
     const payload = call[2];
     expect(payload.event).toBe("session-start");
     expect(payload.instruction).toContain("myproject"); // interpolated
+  });
+
+  it("captures fresh pane delta for stop events and passes it directly to payload", async () => {
+    const freshContent = "RuntimeError: boom\nBLOCKED: runtime failure";
+    mockGetNewPaneTail.mockReturnValue(freshContent);
+    vi.stubEnv("TMUX", "/tmp/tmux-1000/default,123,0");
+    vi.stubEnv("TMUX_PANE", "%7");
+
+    await wakeOpenClaw("stop", {
+      sessionId: "sid-stop",
+      projectPath: "/home/user/myproject",
+    });
+
+    expect(mockGetNewPaneTail).toHaveBeenCalledWith(
+      "%7",
+      join("/home/user/myproject", ".omc", "state"),
+      15,
+    );
+    const payload = vi.mocked(wakeGateway).mock.calls[0]?.[2];
+    expect(payload.tmuxTail).toBe(freshContent);
+  });
+
+  it("omits tmuxTail from stop payload when pane has no new lines", async () => {
+    mockGetNewPaneTail.mockReturnValue("");
+    vi.stubEnv("TMUX", "/tmp/tmux-1000/default,123,0");
+    vi.stubEnv("TMUX_PANE", "%7");
+
+    await wakeOpenClaw("stop", {
+      sessionId: "sid-stop",
+      projectPath: "/home/user/myproject",
+    });
+
+    const payload = vi.mocked(wakeGateway).mock.calls[0]?.[2];
+    expect(payload.tmuxTail).toBeUndefined();
   });
 
   it("uses a single timestamp in both template variables and payload", async () => {
