@@ -13,7 +13,8 @@ import { getOpenClawConfig, resolveGateway } from "./config.js";
 import { wakeGateway, wakeCommandGateway, interpolateInstruction, isCommandGateway } from "./dispatcher.js";
 import { buildOpenClawSignal } from "./signal.js";
 import { shouldCollapseOpenClawBurst } from "./dedupe.js";
-import { basename, join } from "path";
+import { basename } from "path";
+import { parseTmuxTail } from "../notifications/formatter.js";
 import { getCurrentTmuxSession } from "../notifications/tmux.js";
 /** Whether debug logging is enabled */
 const DEBUG = process.env.OMC_OPENCLAW_DEBUG === "1";
@@ -91,19 +92,15 @@ export async function wakeOpenClaw(event, context) {
             }
             return { gateway: gatewayName, success: true, skipped: "deduped" };
         }
-        // Auto-capture tmux pane content for stop/session-end events (best-effort).
-        // Uses delta-only capture to avoid re-alerting on stale pane history from
-        // already-resolved blockers (e.g. old "2 failed" / "exit 127" / "TS5055" lines).
+        // Auto-capture tmux pane content for stop/session-end events (best-effort)
         let tmuxTail = context.tmuxTail;
         if (!tmuxTail && (event === "stop" || event === "session-end") && process.env.TMUX) {
             try {
-                const { getNewPaneTail } = await import("../features/rate-limit-wait/pane-fresh-capture.js");
+                const { capturePaneContent } = await import("../features/rate-limit-wait/tmux-detector.js");
                 const paneId = process.env.TMUX_PANE;
-                const projectPath = context.projectPath;
-                if (paneId && projectPath) {
-                    const stateDir = join(projectPath, ".omc", "state");
-                    const fresh = getNewPaneTail(paneId, stateDir, 15);
-                    tmuxTail = fresh || undefined;
+                if (paneId) {
+                    const captured = capturePaneContent(paneId, 15);
+                    tmuxTail = parseTmuxTail(captured, 15) || undefined;
                 }
             }
             catch {
