@@ -451,3 +451,92 @@ describe('prunePluginDuplicateAgents', () => {
     expect(removed).toEqual([]);
   });
 });
+
+// ── P2 regression (Codex, PR #2529 commit 2398ea66) ─────────────────────────
+// `pruneStandaloneDuplicatesForPluginMode` accepts `opts.configDir`, but the
+// three prune executors (`prunePluginDuplicateAgents`,
+// `prunePluginDuplicateSkills`, `prunePluginDuplicateHooks`) ignored it and
+// operated on module-level `AGENTS_DIR`/`SKILLS_DIR`/`HOOKS_DIR`. Preview
+// (which DOES honor the override) and execute could target different
+// profiles — leaving the requested profile uncleaned and potentially
+// deleting files in the wrong one. The fix threads `opts.configDir`
+// through each prune helper.
+describe('prunePluginDuplicate* configDir override (Codex P2)', () => {
+  let envDir: string;
+  let overrideDir: string;
+  let originalConfigDir: string | undefined;
+  const log = vi.fn();
+
+  beforeEach(() => {
+    envDir = mkdtempSync(join(tmpdir(), 'omc-prune-env-'));
+    overrideDir = mkdtempSync(join(tmpdir(), 'omc-prune-override-'));
+    originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = envDir;
+    log.mockClear();
+  });
+
+  afterEach(() => {
+    if (originalConfigDir === undefined) {
+      delete process.env.CLAUDE_CONFIG_DIR;
+    } else {
+      process.env.CLAUDE_CONFIG_DIR = originalConfigDir;
+    }
+    rmSync(envDir, { recursive: true, force: true });
+    rmSync(overrideDir, { recursive: true, force: true });
+  });
+
+  it('prunePluginDuplicateAgents honors opts.configDir and leaves the module-level dir untouched', async () => {
+    vi.resetModules();
+    const { prunePluginDuplicateAgents: prune, AGENTS_DIR: moduleAgentsDir } = await import('../index.js');
+
+    // Seed BOTH dirs with an OMC-frontmatter agent that matches a package agent.
+    mkdirSync(moduleAgentsDir, { recursive: true });
+    mkdirSync(join(overrideDir, 'agents'), { recursive: true });
+    createAgentFile(moduleAgentsDir, 'architect.md', 'architect');
+    createAgentFile(join(overrideDir, 'agents'), 'architect.md', 'architect');
+
+    const removed = prune(log, { configDir: overrideDir });
+
+    // Override dir was pruned, env/module dir was NOT touched.
+    expect(removed).toContain('architect.md');
+    expect(existsSync(join(overrideDir, 'agents', 'architect.md'))).toBe(false);
+    expect(existsSync(join(moduleAgentsDir, 'architect.md'))).toBe(true);
+  });
+
+  it('prunePluginDuplicateSkills honors opts.configDir and leaves the module-level dir untouched', async () => {
+    vi.resetModules();
+    const { prunePluginDuplicateSkills: prune, SKILLS_DIR: moduleSkillsDir } = await import('../index.js');
+
+    // The prune-skills logic only removes skills whose name matches a
+    // plugin-provided skill. Use 'omc-reference' which ships in the package.
+    mkdirSync(moduleSkillsDir, { recursive: true });
+    mkdirSync(join(overrideDir, 'skills'), { recursive: true });
+    createSkillDir(moduleSkillsDir, 'omc-reference', 'omc-reference');
+    createSkillDir(join(overrideDir, 'skills'), 'omc-reference', 'omc-reference');
+
+    prune(log, { configDir: overrideDir });
+
+    expect(existsSync(join(overrideDir, 'skills', 'omc-reference'))).toBe(false);
+    expect(existsSync(join(moduleSkillsDir, 'omc-reference'))).toBe(true);
+  });
+
+  it('prunePluginDuplicateHooks honors opts.configDir and leaves the module-level dir untouched', async () => {
+    vi.resetModules();
+    const { prunePluginDuplicateHooks: prune, HOOKS_DIR: moduleHooksDir } = await import('../index.js');
+
+    // Use a known OMC hook filename (from the internal OMC_HOOK_FILENAMES
+    // allowlist at src/installer/index.ts:269). This is one of the scripts
+    // the installer writes during hook setup.
+    const omcHookName = 'keyword-detector.mjs';
+    mkdirSync(moduleHooksDir, { recursive: true });
+    mkdirSync(join(overrideDir, 'hooks'), { recursive: true });
+    writeFileSync(join(moduleHooksDir, omcHookName), '#!/usr/bin/env node\n// env', 'utf-8');
+    writeFileSync(join(overrideDir, 'hooks', omcHookName), '#!/usr/bin/env node\n// override', 'utf-8');
+
+    const removed = prune(log, { configDir: overrideDir });
+
+    expect(removed).toContain(join(overrideDir, 'hooks', omcHookName));
+    expect(existsSync(join(overrideDir, 'hooks', omcHookName))).toBe(false);
+    expect(existsSync(join(moduleHooksDir, omcHookName))).toBe(true);
+  });
+});

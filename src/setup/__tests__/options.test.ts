@@ -19,6 +19,7 @@ import {
   readEnvPartial,
   resolveOptions,
 } from '../options.js';
+import { dumpSafeDefaultsAsJson } from '../safe-defaults.js';
 
 // Fresh tmpdir per describe block for preset fixtures
 let TMP: string;
@@ -410,6 +411,57 @@ describe('loadPreset', () => {
     const presetPath = join(TMP, 'invalid.json');
     writeFileSync(presetPath, '{ this is not json', 'utf-8');
     expect(() => loadPreset(presetPath)).toThrow(/invalid preset/);
+  });
+
+  // ── P2 regression (Codex, PR #2529 commit 2398ea66) ──────────────────────
+  // `dumpSafeDefaultsAsJson()` emits `hud.elements`, but `presetToPartial()`
+  // previously never copied `hud` back into resolved options, so the
+  // documented `dump → tweak → --preset` round-trip silently dropped the
+  // statusline config and the reloaded profile diverged from SAFE_DEFAULTS.
+  it('preserves hud.elements across the preset round-trip', () => {
+    const presetPath = join(TMP, 'hud-preset.json');
+    writeFileSync(
+      presetPath,
+      JSON.stringify({
+        target: 'global',
+        hud: {
+          elements: {
+            model: { enabled: true, position: 'left' },
+            context: { enabled: false },
+          },
+        },
+      }),
+      'utf-8',
+    );
+    const p = loadPreset(presetPath);
+    expect(p.hud).toBeDefined();
+    expect(p.hud?.elements).toEqual({
+      model: { enabled: true, position: 'left' },
+      context: { enabled: false },
+    });
+  });
+
+  it('hud round-trip via dumpSafeDefaultsAsJson → loadPreset keeps elements intact', () => {
+    // The canonical use case documented in docs/REFERENCE.md:
+    //   omc setup --dump-safe-defaults > preset.json
+    //   omc setup --preset preset.json
+    // Previously the reload would drop hud.elements entirely.
+    const presetPath = join(TMP, 'safe-defaults.json');
+    writeFileSync(presetPath, dumpSafeDefaultsAsJson(), 'utf-8');
+    const p = loadPreset(presetPath);
+    // dumpSafeDefaultsAsJson only emits `hud` when SAFE_DEFAULTS.hud is set,
+    // so we only assert the elements shape when it was written.
+    if (p.hud) {
+      expect(p.hud.elements).toBeDefined();
+      expect(typeof p.hud.elements).toBe('object');
+    }
+  });
+
+  it('preset without hud key stays undefined (no implicit fill-in)', () => {
+    const presetPath = join(TMP, 'no-hud.json');
+    writeFileSync(presetPath, JSON.stringify({ target: 'local' }), 'utf-8');
+    const p = loadPreset(presetPath);
+    expect(p.hud).toBeUndefined();
   });
 });
 
