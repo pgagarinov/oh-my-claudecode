@@ -138,7 +138,11 @@ program
   .name('omc')
   .description('Multi-agent orchestration system for Claude Agent SDK')
   .version(version)
+  .option('--plugin-dir <path>', 'Override OMC plugin root directory (sets OMC_PLUGIN_ROOT)')
   .allowUnknownOption()
+  .hook('preAction', (thisCommand) => {
+    applyPluginDirOption(thisCommand.opts().pluginDir as string | undefined);
+  })
   .action(defaultAction);
 
 /**

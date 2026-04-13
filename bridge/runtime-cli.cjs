@@ -1806,6 +1806,26 @@ function loadEnvConfig() {
   }
   return config;
 }
+function warnOnDeprecatedDelegationRouting(config) {
+  const deprecatedProviders = /* @__PURE__ */ new Set();
+  const defaultProvider = config.delegationRouting?.defaultProvider;
+  if (defaultProvider === "codex" || defaultProvider === "gemini") {
+    deprecatedProviders.add(defaultProvider);
+  }
+  const roles = config.delegationRouting?.roles ?? {};
+  for (const route of Object.values(roles)) {
+    const provider = route?.provider;
+    if (provider === "codex" || provider === "gemini") {
+      deprecatedProviders.add(provider);
+    }
+  }
+  if (deprecatedProviders.size === 0) {
+    return;
+  }
+  console.warn(
+    "[OMC] delegationRouting to Codex/Gemini is deprecated and falls back to Claude Task. Use /team for Codex/Gemini CLI workers instead."
+  );
+}
 function loadConfig() {
   const paths = getConfigPaths();
   let config = buildDefaultConfig();
@@ -1825,6 +1845,7 @@ function loadConfig() {
       forceInherit: true
     };
   }
+  warnOnDeprecatedDelegationRouting(config);
   return config;
 }
 

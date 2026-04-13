@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { getGlobalOmcConfigCandidates } from '../../../utils/paths.js';
-import { getIdleNotificationCooldownSeconds, shouldSendIdleNotification, recordIdleNotificationSent, } from '../index.js';
+import { getIdleNotificationCooldownSeconds, shouldWakeOpenClawOnStop, shouldSendIdleNotification, recordIdleNotificationSent, } from '../index.js';
 import { atomicWriteJsonSync } from '../../../lib/atomic-write.js';
 // Mock fs and os modules (hoisted before all imports)
 vi.mock('fs', async () => {
@@ -407,6 +407,43 @@ describe('shouldSendIdleNotification', () => {
             throw new Error('not found');
         });
         expect(shouldSendIdleNotification(TEST_STATE_DIR, undefined, changedBacklogState)).toBe(true);
+    });
+});
+describe('shouldWakeOpenClawOnStop', () => {
+    const zeroBacklogState = { signature: 'repo-zero', backlogZero: true };
+    const changedBacklogState = { signature: 'repo-new', backlogZero: true };
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+    it('suppresses stop wakes when the zero-backlog repo snapshot is unchanged', () => {
+        const oldTimestamp = new Date(Date.now() - 90_000).toISOString();
+        existsSync.mockImplementation((p) => p === COOLDOWN_PATH);
+        readFileSync.mockImplementation((p) => {
+            if (p === COOLDOWN_PATH) {
+                return JSON.stringify({
+                    lastSentAt: oldTimestamp,
+                    repoSignature: zeroBacklogState.signature,
+                    backlogZero: true,
+                });
+            }
+            throw new Error('not found');
+        });
+        expect(shouldWakeOpenClawOnStop(TEST_STATE_DIR, TEST_SESSION_ID, zeroBacklogState)).toBe(false);
+    });
+    it('still allows stop wakes when only the ordinary cooldown is active', () => {
+        const recentTimestamp = new Date(Date.now() - 5_000).toISOString();
+        existsSync.mockImplementation((p) => p === COOLDOWN_PATH);
+        readFileSync.mockImplementation((p) => {
+            if (p === COOLDOWN_PATH) {
+                return JSON.stringify({
+                    lastSentAt: recentTimestamp,
+                    repoSignature: changedBacklogState.signature,
+                    backlogZero: false,
+                });
+            }
+            throw new Error('not found');
+        });
+        expect(shouldWakeOpenClawOnStop(TEST_STATE_DIR, TEST_SESSION_ID, zeroBacklogState)).toBe(true);
     });
 });
 describe('recordIdleNotificationSent', () => {

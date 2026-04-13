@@ -8,7 +8,7 @@
  * created by OMC in previous versions but are no longer shipped.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 // We test the exported cleanup functions directly
@@ -31,6 +31,9 @@ function createUserSkillDir(dir, skillName) {
     mkdirSync(skillDir, { recursive: true });
     // No frontmatter — just user prose
     writeFileSync(join(skillDir, 'SKILL.md'), `# My Custom Skill\n\nThis is a user-created skill.\n`);
+}
+function createManagedSkillMarker(dir, skillName) {
+    writeFileSync(join(dir, skillName, '.omc-managed'), 'omc-managed\n');
 }
 // ── Stale Agent Cleanup ──────────────────────────────────────────────────────
 describe('cleanupStaleAgents', () => {
@@ -118,12 +121,12 @@ describe('cleanupStaleSkills', () => {
         }
         rmSync(tempDir, { recursive: true, force: true });
     });
-    it('removes skill directories that have OMC frontmatter but are no longer in the package', async () => {
+    it('removes stale skills only when OMC ownership is explicitly marked', async () => {
         vi.resetModules();
         const { cleanupStaleSkills: cleanup, SKILLS_DIR: skillsDir } = await import('../index.js');
         mkdirSync(skillsDir, { recursive: true });
-        // Create a fake stale skill
         createSkillDir(skillsDir, 'removed-skill', 'removed-skill');
+        createManagedSkillMarker(skillsDir, 'removed-skill');
         const removed = cleanup(log);
         expect(removed).toContain('removed-skill');
         expect(existsSync(join(skillsDir, 'removed-skill'))).toBe(false);
@@ -146,6 +149,33 @@ describe('cleanupStaleSkills', () => {
         const removed = cleanup(log);
         expect(removed).not.toContain('my-custom-skill');
         expect(existsSync(join(skillsDir, 'my-custom-skill'))).toBe(true);
+    });
+    it('preserves third-party skills with standard frontmatter when no OMC marker is present', async () => {
+        vi.resetModules();
+        const { cleanupStaleSkills: cleanup, SKILLS_DIR: skillsDir } = await import('../index.js');
+        mkdirSync(skillsDir, { recursive: true });
+        createSkillDir(skillsDir, 'gstack', 'gstack');
+        const removed = cleanup(log);
+        expect(removed).not.toContain('gstack');
+        expect(existsSync(join(skillsDir, 'gstack'))).toBe(true);
+    });
+    it('preserves symlinked skill directories without an OMC marker', async () => {
+        vi.resetModules();
+        const { cleanupStaleSkills: cleanup, SKILLS_DIR: skillsDir } = await import('../index.js');
+        mkdirSync(skillsDir, { recursive: true });
+        const externalRoot = mkdtempSync(join(tmpdir(), 'omc-third-party-skill-'));
+        const externalSkillDir = join(externalRoot, 'linked-skill');
+        mkdirSync(externalSkillDir, { recursive: true });
+        writeFileSync(join(externalSkillDir, 'SKILL.md'), '---\nname: linked-skill\ndescription: external\n---\n\n# linked-skill\n');
+        symlinkSync(externalSkillDir, join(skillsDir, 'linked-skill'), 'dir');
+        try {
+            const removed = cleanup(log);
+            expect(removed).not.toContain('linked-skill');
+            expect(existsSync(join(skillsDir, 'linked-skill'))).toBe(true);
+        }
+        finally {
+            rmSync(externalRoot, { recursive: true, force: true });
+        }
     });
     it('preserves omc-learned directory (user-created skills)', async () => {
         vi.resetModules();
@@ -306,6 +336,81 @@ describe('prunePluginDuplicateAgents', () => {
     it('returns empty when agents directory does not exist', () => {
         const removed = prunePluginDuplicateAgents(log);
         expect(removed).toEqual([]);
+    });
+});
+// ── P2 regression (Codex, PR #2529 commit 2398ea66) ─────────────────────────
+// `pruneStandaloneDuplicatesForPluginMode` accepts `opts.configDir`, but the
+// three prune executors (`prunePluginDuplicateAgents`,
+// `prunePluginDuplicateSkills`, `prunePluginDuplicateHooks`) ignored it and
+// operated on module-level `AGENTS_DIR`/`SKILLS_DIR`/`HOOKS_DIR`. Preview
+// (which DOES honor the override) and execute could target different
+// profiles — leaving the requested profile uncleaned and potentially
+// deleting files in the wrong one. The fix threads `opts.configDir`
+// through each prune helper.
+describe('prunePluginDuplicate* configDir override (Codex P2)', () => {
+    let envDir;
+    let overrideDir;
+    let originalConfigDir;
+    const log = vi.fn();
+    beforeEach(() => {
+        envDir = mkdtempSync(join(tmpdir(), 'omc-prune-env-'));
+        overrideDir = mkdtempSync(join(tmpdir(), 'omc-prune-override-'));
+        originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+        process.env.CLAUDE_CONFIG_DIR = envDir;
+        log.mockClear();
+    });
+    afterEach(() => {
+        if (originalConfigDir === undefined) {
+            delete process.env.CLAUDE_CONFIG_DIR;
+        }
+        else {
+            process.env.CLAUDE_CONFIG_DIR = originalConfigDir;
+        }
+        rmSync(envDir, { recursive: true, force: true });
+        rmSync(overrideDir, { recursive: true, force: true });
+    });
+    it('prunePluginDuplicateAgents honors opts.configDir and leaves the module-level dir untouched', async () => {
+        vi.resetModules();
+        const { prunePluginDuplicateAgents: prune, AGENTS_DIR: moduleAgentsDir } = await import('../index.js');
+        // Seed BOTH dirs with an OMC-frontmatter agent that matches a package agent.
+        mkdirSync(moduleAgentsDir, { recursive: true });
+        mkdirSync(join(overrideDir, 'agents'), { recursive: true });
+        createAgentFile(moduleAgentsDir, 'architect.md', 'architect');
+        createAgentFile(join(overrideDir, 'agents'), 'architect.md', 'architect');
+        const removed = prune(log, { configDir: overrideDir });
+        // Override dir was pruned, env/module dir was NOT touched.
+        expect(removed).toContain('architect.md');
+        expect(existsSync(join(overrideDir, 'agents', 'architect.md'))).toBe(false);
+        expect(existsSync(join(moduleAgentsDir, 'architect.md'))).toBe(true);
+    });
+    it('prunePluginDuplicateSkills honors opts.configDir and leaves the module-level dir untouched', async () => {
+        vi.resetModules();
+        const { prunePluginDuplicateSkills: prune, SKILLS_DIR: moduleSkillsDir } = await import('../index.js');
+        // The prune-skills logic only removes skills whose name matches a
+        // plugin-provided skill. Use 'omc-reference' which ships in the package.
+        mkdirSync(moduleSkillsDir, { recursive: true });
+        mkdirSync(join(overrideDir, 'skills'), { recursive: true });
+        createSkillDir(moduleSkillsDir, 'omc-reference', 'omc-reference');
+        createSkillDir(join(overrideDir, 'skills'), 'omc-reference', 'omc-reference');
+        prune(log, { configDir: overrideDir });
+        expect(existsSync(join(overrideDir, 'skills', 'omc-reference'))).toBe(false);
+        expect(existsSync(join(moduleSkillsDir, 'omc-reference'))).toBe(true);
+    });
+    it('prunePluginDuplicateHooks honors opts.configDir and leaves the module-level dir untouched', async () => {
+        vi.resetModules();
+        const { prunePluginDuplicateHooks: prune, HOOKS_DIR: moduleHooksDir } = await import('../index.js');
+        // Use a known OMC hook filename (from the internal OMC_HOOK_FILENAMES
+        // allowlist at src/installer/index.ts:269). This is one of the scripts
+        // the installer writes during hook setup.
+        const omcHookName = 'keyword-detector.mjs';
+        mkdirSync(moduleHooksDir, { recursive: true });
+        mkdirSync(join(overrideDir, 'hooks'), { recursive: true });
+        writeFileSync(join(moduleHooksDir, omcHookName), '#!/usr/bin/env node\n// env', 'utf-8');
+        writeFileSync(join(overrideDir, 'hooks', omcHookName), '#!/usr/bin/env node\n// override', 'utf-8');
+        const removed = prune(log, { configDir: overrideDir });
+        expect(removed).toContain(join(overrideDir, 'hooks', omcHookName));
+        expect(existsSync(join(overrideDir, 'hooks', omcHookName))).toBe(false);
+        expect(existsSync(join(moduleHooksDir, omcHookName))).toBe(true);
     });
 });
 //# sourceMappingURL=stale-cleanup.test.js.map

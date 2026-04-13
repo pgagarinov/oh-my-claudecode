@@ -157,3 +157,28 @@ describe('omc setup commander pipeline — pluginDirMode precedence', () => {
     expect(opts.force).toBe(true);
   });
 });
+
+describe('omc --plugin-dir <path> setup (program-level flag before subcommand)', () => {
+  async function runWithProgramFlag(extraArgs: string[]): Promise<void> {
+    vi.resetModules();
+    const { buildProgram } = await import('../index.js');
+    const program = buildProgram();
+    // --plugin-dir before the subcommand, matching omc-hvp wrapper pattern
+    await program.parseAsync(['--plugin-dir', '/tmp/test-plugin', 'setup', ...extraArgs], { from: 'user' });
+  }
+
+  it('sets OMC_PLUGIN_ROOT and auto-enables pluginDirMode via env detection', async () => {
+    await runWithProgramFlag(['--infra-only', '--quiet']);
+    expect(process.env[OMC_PLUGIN_ROOT_ENV]).toBe('/tmp/test-plugin');
+    expect(lastInstallOptions().pluginDirMode).toBe(true);
+  });
+
+  it('--no-plugin still wins over program-level --plugin-dir', async () => {
+    await runWithProgramFlag(['--infra-only', '--no-plugin']);
+    const opts = lastInstallOptions();
+    expect(process.env[OMC_PLUGIN_ROOT_ENV]).toBe('/tmp/test-plugin');
+    expect(opts.pluginDirMode).toBe(false);
+    expect(opts.noPlugin).toBe(true);
+    expect(loggedText()).toMatch(/conflict/i);
+  });
+});

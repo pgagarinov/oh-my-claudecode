@@ -158,7 +158,9 @@ export declare function cleanupStaleAgents(log: (msg: string) => void): string[]
  * appear twice. Removes standalone copies with OMC frontmatter whose
  * filename matches a current package agent.
  */
-export declare function prunePluginDuplicateAgents(log: (msg: string) => void): string[];
+export declare function prunePluginDuplicateAgents(log: (msg: string) => void, opts?: {
+    configDir?: string;
+}): string[];
 /**
  * Remove stale OMC-created skill directories from the config skills directory.
  *
@@ -176,7 +178,9 @@ export declare function cleanupStaleSkills(log: (msg: string) => void): string[]
  * content-hashes match any installed plugin version, preserving user-authored
  * skills that happen to share a name.
  */
-export declare function prunePluginDuplicateSkills(log: (msg: string) => void): string[];
+export declare function prunePluginDuplicateSkills(log: (msg: string) => void, opts?: {
+    configDir?: string;
+}): string[];
 /**
  * Remove standalone hook files under $CONFIG_DIR/hooks/ that duplicate the
  * plugin's hooks/hooks.json delivery. Invoked ONLY when a plugin is active
@@ -185,7 +189,9 @@ export declare function prunePluginDuplicateSkills(log: (msg: string) => void): 
  *
  * Returns the list of absolute paths that were removed.
  */
-export declare function prunePluginDuplicateHooks(log: (msg: string) => void): string[];
+export declare function prunePluginDuplicateHooks(log: (msg: string) => void, opts?: {
+    configDir?: string;
+}): string[];
 /**
  * Result shape shared by both the preview and execute paths for plugin-mode
  * leftover cleanup.

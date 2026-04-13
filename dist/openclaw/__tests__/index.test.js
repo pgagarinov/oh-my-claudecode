@@ -6,9 +6,9 @@ const mockGetCurrentTmuxSession = vi.fn(() => null);
 vi.mock("../../notifications/tmux.js", () => ({
     getCurrentTmuxSession: () => mockGetCurrentTmuxSession(),
 }));
-const mockCapturePaneContent = vi.fn(() => "");
-vi.mock("../../features/rate-limit-wait/tmux-detector.js", () => ({
-    capturePaneContent: (paneId, lines) => mockCapturePaneContent(paneId, lines),
+const mockGetNewPaneTail = vi.fn(() => "");
+vi.mock("../../features/rate-limit-wait/pane-fresh-capture.js", () => ({
+    getNewPaneTail: (paneId, stateDir, maxLines) => mockGetNewPaneTail(paneId, stateDir, maxLines),
 }));
 // Mock config and dispatcher modules
 vi.mock("../config.js", () => ({
@@ -60,7 +60,7 @@ describe("wakeOpenClaw", () => {
             statusCode: 200,
         });
         mockGetCurrentTmuxSession.mockReturnValue(null);
-        mockCapturePaneContent.mockReturnValue("");
+        mockGetNewPaneTail.mockReturnValue("");
     });
     afterEach(() => {
         vi.unstubAllEnvs();
@@ -96,29 +96,29 @@ describe("wakeOpenClaw", () => {
         expect(payload.event).toBe("session-start");
         expect(payload.instruction).toContain("myproject"); // interpolated
     });
-    it("sanitizes tmux tail before sending stop payloads", async () => {
-        mockCapturePaneContent.mockReturnValue([
-            "Review PR #2498 and reply with exactly one verdict:",
-            "- approve",
-            "- request-changes",
-            "- follow-up-fix",
-            "- BLOCKED",
-            "Traceback (most recent call last):",
-            "RuntimeError: boom",
-            "BLOCKED: runtime failure",
-        ].join("\n"));
+    it("captures fresh pane delta for stop events and passes it directly to payload", async () => {
+        const freshContent = "RuntimeError: boom\nBLOCKED: runtime failure";
+        mockGetNewPaneTail.mockReturnValue(freshContent);
         vi.stubEnv("TMUX", "/tmp/tmux-1000/default,123,0");
         vi.stubEnv("TMUX_PANE", "%7");
         await wakeOpenClaw("stop", {
             sessionId: "sid-stop",
             projectPath: "/home/user/myproject",
         });
-        expect(mockCapturePaneContent).toHaveBeenCalledWith("%7", 15);
+        expect(mockGetNewPaneTail).toHaveBeenCalledWith("%7", join("/home/user/myproject", ".omc", "state"), 15);
         const payload = vi.mocked(wakeGateway).mock.calls[0]?.[2];
-        expect(payload.tmuxTail).toBe("Traceback (most recent call last):\nRuntimeError: boom\nBLOCKED: runtime failure");
-        expect(payload.tmuxTail).not.toContain("approve");
-        expect(payload.tmuxTail).not.toContain("request-changes");
-        expect(payload.tmuxTail).not.toContain("follow-up-fix");
+        expect(payload.tmuxTail).toBe(freshContent);
+    });
+    it("omits tmuxTail from stop payload when pane has no new lines", async () => {
+        mockGetNewPaneTail.mockReturnValue("");
+        vi.stubEnv("TMUX", "/tmp/tmux-1000/default,123,0");
+        vi.stubEnv("TMUX_PANE", "%7");
+        await wakeOpenClaw("stop", {
+            sessionId: "sid-stop",
+            projectPath: "/home/user/myproject",
+        });
+        const payload = vi.mocked(wakeGateway).mock.calls[0]?.[2];
+        expect(payload.tmuxTail).toBeUndefined();
     });
     it("uses a single timestamp in both template variables and payload", async () => {
         // Spy on Date.prototype.toISOString to track calls
