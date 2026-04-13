@@ -1,0 +1,1 @@
+{"version":3,"file":"omc-reference.d.ts","sourceRoot":"","sources":["../../src/setup/omc-reference.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAcH,MAAM,WAAW,yBAAyB;IACxC,SAAS,EAAE,OAAO,CAAC;IACnB,WAAW,EAAE,MAAM,GAAG,IAAI,CAAC;IAC3B,MAAM,CAAC,EAAE,MAAM,CAAC;CACjB;AAED;;;;;;;GAOG;AACH,wBAAgB,wBAAwB,CACtC,eAAe,EAAE,MAAM,EACvB,mBAAmB,CAAC,EAAE,MAAM,GAC3B,yBAAyB,CA8D3B"}
