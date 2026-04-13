@@ -9394,6 +9394,12 @@ function isOmcStatusLine(statusLine) {
   }
   return false;
 }
+function resolveStatusLineAction(existing, force) {
+  const needsMigration = typeof existing === "string" && isOmcStatusLine(existing);
+  if (!existing || needsMigration) return "set";
+  if (force) return "force";
+  return "skip";
+}
 function isOmcHook(command) {
   const lowerCommand = command.toLowerCase();
   const omcPattern = /(?:^|[\/\\_-])omc(?:$|[\/\\_-])/;
@@ -10444,21 +10450,14 @@ function install(options = {}) {
         } else {
           statusLineCommand = buildStatusLineCommand(nodeBin, hudScriptPath);
         }
-        const needsMigration = typeof existingSettings.statusLine === "string" && isOmcStatusLine(existingSettings.statusLine);
-        if (!existingSettings.statusLine || needsMigration) {
+        const action = resolveStatusLineAction(existingSettings.statusLine, !!options.force);
+        if (action === "set" || action === "force") {
+          const wasMigration = action === "set" && typeof existingSettings.statusLine === "string" && isOmcStatusLine(existingSettings.statusLine);
           existingSettings.statusLine = {
             type: "command",
             command: statusLineCommand
           };
-          log3(needsMigration ? "  Migrated statusLine from legacy string to object format" : "  Configured statusLine");
-        } else if (options.force && isOmcStatusLine(existingSettings.statusLine)) {
-          existingSettings.statusLine = {
-            type: "command",
-            command: statusLineCommand
-          };
-          log3("  Updated statusLine (--force)");
-        } else if (options.force) {
-          log3("  statusLine owned by another tool, preserving (use manual edit to override)");
+          log3(wasMigration ? "  Migrated statusLine from legacy string to object format" : action === "force" ? "  Updated statusLine (--force)" : "  Configured statusLine");
         } else {
           log3("  statusLine already configured, skipping (use --force to override)");
         }

@@ -264,6 +264,27 @@ export function isOmcStatusLine(statusLine: unknown): boolean {
 }
 
 /**
+ * Decide how to merge a new statusLine command into existing settings.
+ *
+ * Returns the action to take:
+ * - 'set': write the new statusLine (no existing or needs migration)
+ * - 'force': overwrite existing statusLine (--force)
+ * - 'skip': leave existing statusLine unchanged
+ *
+ * @param existing - current statusLine value from settings.json
+ * @param force - whether --force flag was passed
+ */
+export function resolveStatusLineAction(
+  existing: unknown,
+  force: boolean,
+): 'set' | 'force' | 'skip' {
+  const needsMigration = typeof existing === 'string' && isOmcStatusLine(existing);
+  if (!existing || needsMigration) return 'set';
+  if (force) return 'force';
+  return 'skip';
+}
+
+/**
  * Known OMC hook script filenames installed into .claude/hooks/.
  * Must be kept in sync with HOOKS_SETTINGS_CONFIG_NODE command entries.
  */
@@ -1855,25 +1876,21 @@ export function install(options: InstallOptions = {}): InstallResult {
         } else {
           statusLineCommand = buildStatusLineCommand(nodeBin, hudScriptPath);
         }
-        // Auto-migrate legacy string format (pre-v4.5) to object format
-        const needsMigration = typeof existingSettings.statusLine === 'string'
-          && isOmcStatusLine(existingSettings.statusLine);
-        if (!existingSettings.statusLine || needsMigration) {
+        // Decide whether to set, force-override, or skip statusLine
+        const action = resolveStatusLineAction(existingSettings.statusLine, !!options.force);
+        if (action === 'set' || action === 'force') {
+          const wasMigration = action === 'set'
+            && typeof existingSettings.statusLine === 'string'
+            && isOmcStatusLine(existingSettings.statusLine);
           existingSettings.statusLine = {
             type: 'command',
             command: statusLineCommand
           };
-          log(needsMigration
+          log(wasMigration
             ? '  Migrated statusLine from legacy string to object format'
-            : '  Configured statusLine');
-        } else if (options.force && isOmcStatusLine(existingSettings.statusLine)) {
-          existingSettings.statusLine = {
-            type: 'command',
-            command: statusLineCommand
-          };
-          log('  Updated statusLine (--force)');
-        } else if (options.force) {
-          log('  statusLine owned by another tool, preserving (use manual edit to override)');
+            : action === 'force'
+              ? '  Updated statusLine (--force)'
+              : '  Configured statusLine');
         } else {
           log('  statusLine already configured, skipping (use --force to override)');
         }

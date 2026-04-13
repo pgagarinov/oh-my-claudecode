@@ -87,6 +87,18 @@ export declare function isHudEnabledInConfig(): boolean;
  */
 export declare function isOmcStatusLine(statusLine: unknown): boolean;
 /**
+ * Decide how to merge a new statusLine command into existing settings.
+ *
+ * Returns the action to take:
+ * - 'set': write the new statusLine (no existing or needs migration)
+ * - 'force': overwrite existing statusLine (--force)
+ * - 'skip': leave existing statusLine unchanged
+ *
+ * @param existing - current statusLine value from settings.json
+ * @param force - whether --force flag was passed
+ */
+export declare function resolveStatusLineAction(existing: unknown, force: boolean): 'set' | 'force' | 'skip';
+/**
  * Detect whether a hook command belongs to oh-my-claudecode.
  *
  * Recognition strategy (any match is sufficient):

@@ -10,7 +10,7 @@ vi.mock('fs', async () => {
 });
 
 import { existsSync, readFileSync } from 'fs';
-import { isHudEnabledInConfig, isOmcStatusLine, CLAUDE_CONFIG_DIR } from '../installer/index.js';
+import { isHudEnabledInConfig, isOmcStatusLine, resolveStatusLineAction, CLAUDE_CONFIG_DIR } from '../installer/index.js';
 import type { InstallOptions } from '../installer/index.js';
 import { join } from 'path';
 
@@ -167,5 +167,62 @@ describe('isOmcStatusLine', () => {
       type: 'command',
       command: 'sh ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/find-node.sh ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/hud/omc-hud.mjs'
     })).toBe(true);
+  });
+});
+
+describe('resolveStatusLineAction', () => {
+  // No existing statusLine → always set
+  it('should return "set" when no existing statusLine', () => {
+    expect(resolveStatusLineAction(undefined, false)).toBe('set');
+    expect(resolveStatusLineAction(null, false)).toBe('set');
+    expect(resolveStatusLineAction('', false)).toBe('set');
+  });
+
+  it('should return "set" when no existing statusLine even without force', () => {
+    expect(resolveStatusLineAction(undefined, true)).toBe('set');
+  });
+
+  // Legacy OMC string → migrate (set)
+  it('should return "set" for legacy OMC string statusLine (migration)', () => {
+    expect(resolveStatusLineAction('~/.claude/hud/omc-hud.mjs', false)).toBe('set');
+  });
+
+  // Existing non-OMC statusLine, no force → skip
+  it('should return "skip" for non-OMC statusLine without force', () => {
+    expect(resolveStatusLineAction({
+      type: 'command',
+      command: 'bash "/path/to/caveman-statusline.sh"'
+    }, false)).toBe('skip');
+  });
+
+  // Existing OMC statusLine, no force → skip
+  it('should return "skip" for existing OMC statusLine without force', () => {
+    expect(resolveStatusLineAction({
+      type: 'command',
+      command: 'node /home/user/.claude/hud/omc-hud.mjs'
+    }, false)).toBe('skip');
+  });
+
+  // --force overrides OMC-owned statusLine
+  it('should return "force" for OMC statusLine with force', () => {
+    expect(resolveStatusLineAction({
+      type: 'command',
+      command: 'node /home/user/.claude/hud/omc-hud.mjs'
+    }, true)).toBe('force');
+  });
+
+  // --force overrides non-OMC statusLine (the bug fix)
+  it('should return "force" for non-OMC statusLine with force', () => {
+    expect(resolveStatusLineAction({
+      type: 'command',
+      command: 'bash "/path/to/caveman-statusline.sh"'
+    }, true)).toBe('force');
+  });
+
+  it('should return "force" for arbitrary third-party statusLine with force', () => {
+    expect(resolveStatusLineAction({
+      type: 'command',
+      command: 'my-custom-tool --status'
+    }, true)).toBe('force');
   });
 });
