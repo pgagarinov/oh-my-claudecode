@@ -15,7 +15,9 @@ English | [한국어](README.ko.md) | [中文](README.zh.md) | [日本語](READM
 
 _Don't learn Claude Code. Just use OMC._
 
-[Get Started](#quick-start) • [Documentation](https://yeachan-heo.github.io/oh-my-claudecode-website) • [CLI Reference](https://yeachan-heo.github.io/oh-my-claudecode-website/docs.html#cli-reference) • [Workflows](https://yeachan-heo.github.io/oh-my-claudecode-website/docs.html#workflows) • [Migration Guide](docs/MIGRATION.md) • [Discord](https://discord.gg/PUwSMR9XNk)
+[Get Started](#quick-start) • [Documentation](https://yeachan-heo.github.io/oh-my-claudecode-website) • [CLI Reference](https://yeachan-heo.github.io/oh-my-claudecode-website/docs.html#cli-reference) • [Workflows](https://yeachan-heo.github.io/oh-my-claudecode-website/docs.html#workflows) • [Migration Guide](docs/MIGRATION.md) • [PR Review Process](docs/PR-REVIEW-PROCESS.md) • [Discord](https://discord.gg/PUwSMR9XNk)
+
+> Maintainer note: this fork can pair the repo-side `clawdbot-review` workflow with a private poller under `~/.clawhip/private-review/` that prepares local worktrees, tracks reviewed head SHAs, and posts signed review results back to GitHub.
 
 ---
 
@@ -565,3 +567,15 @@ If Oh-My-ClaudeCode helps your workflow, consider sponsoring:
 - 🐛 Report bugs
 - 💡 Suggest features
 - 📝 Contribute code
+
+<!-- private review poller test -->
+
+<!-- e2e test marker 2026-04-06T23:20:39Z -->
+
+<!-- e2e test marker (skill path) 2026-04-07T00:04:45Z -->
+
+<!-- e2e test marker (post-fix) 2026-04-07T00:33:43Z -->
+
+<!-- e2e test marker (post-fix Ralph) 2026-04-07T00:37:27Z -->
+
+<!-- e2e test (file-based decisions) 2026-04-07T02:34:32Z -->
