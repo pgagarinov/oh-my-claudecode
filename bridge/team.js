@@ -2580,11 +2580,6 @@ function commandExists(command, env) {
   });
   return result.status === 0;
 }
-function isClaudeSession(env) {
-  return Boolean(
-    env.CLAUDECODE?.trim() || env.CLAUDE_SESSION_ID?.trim() || env.CLAUDECODE_SESSION_ID?.trim()
-  );
-}
 function resolveOmcCliPrefix(options = {}) {
   const env = options.env ?? process.env;
   const omcAvailable = options.omcAvailable ?? commandExists(OMC_CLI_BINARY, env);
@@ -2598,11 +2593,7 @@ function resolveOmcCliPrefix(options = {}) {
   return OMC_CLI_BINARY;
 }
 function resolveInvocationPrefix(commandSuffix, options = {}) {
-  const env = options.env ?? process.env;
-  const normalizedSuffix = commandSuffix.trim();
-  if (/^ask(?:\s|$)/.test(normalizedSuffix) && isClaudeSession(env)) {
-    return OMC_CLI_BINARY;
-  }
+  void commandSuffix;
   return resolveOmcCliPrefix(options);
 }
 function formatOmcCliInvocation(commandSuffix, options = {}) {

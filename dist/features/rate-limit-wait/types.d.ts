@@ -112,6 +112,11 @@ export interface DaemonConfig {
     pidFilePath?: string;
     /** Log file path (default: XDG-aware global OMC state path) */
     logFilePath?: string;
+    /**
+     * Override CLAUDE_CONFIG_DIR passed to daemon child.
+     * Defaults to process.env.CLAUDE_CONFIG_DIR at startDaemon() call time.
+     */
+    claudeConfigDir?: string;
 }
 export interface ResumeResult {
     /** Pane ID */

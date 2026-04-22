@@ -49,6 +49,7 @@ const DEFAULT_CONFIG: Required<DaemonConfig> = {
   stateFilePath: getGlobalOmcStatePath('rate-limit-daemon.json'),
   pidFilePath: getGlobalOmcStatePath('rate-limit-daemon.pid'),
   logFilePath: getGlobalOmcStatePath('rate-limit-daemon.log'),
+  claudeConfigDir: '',
 };
 
 /** Maximum log file size before rotation (1MB) */
@@ -495,6 +496,11 @@ export function startDaemon(config?: DaemonConfig): DaemonResponse {
     const daemonEnv = {
       ...createMinimalDaemonEnv(),
       OMC_DAEMON_CONFIG_FILE: configPath,
+      ...(cfg.claudeConfigDir
+        ? { CLAUDE_CONFIG_DIR: cfg.claudeConfigDir }
+        : process.env.CLAUDE_CONFIG_DIR
+          ? { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR }
+          : {}),
     };
     const child = spawn('node', ['-e', daemonScript], {
       detached: true,

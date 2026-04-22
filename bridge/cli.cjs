@@ -8674,7 +8674,7 @@ function parseCodexMcpServerNames(content) {
     const sectionMatch = line.match(/^\[mcp_servers\.([^\]]+)\]$/);
     if (sectionMatch) {
       const name = sectionMatch[1].trim();
-      if (name) {
+      if (name && CODEX_MCP_SERVER_NAME_PATTERN.test(name)) {
         names.add(name);
       }
     }
@@ -8693,7 +8693,7 @@ function syncCodexConfigToml(existingContent, registry2) {
   const base = stripManagedCodexBlock(existingContent);
   const existingServerNames = parseCodexMcpServerNames(base);
   const managedRegistry = Object.fromEntries(
-    Object.entries(registry2).filter(([name]) => !existingServerNames.has(name))
+    Object.entries(registry2).filter(([name]) => CODEX_MCP_SERVER_NAME_PATTERN.test(name) && !existingServerNames.has(name))
   );
   const managedBlock = renderManagedCodexMcpBlock(managedRegistry);
   const nextContent = managedBlock ? `${base ? `${base}
@@ -8867,7 +8867,7 @@ function inspectUnifiedMcpRegistrySync() {
     codexMismatched
   };
 }
-var import_fs35, import_os10, import_path47, MANAGED_START, MANAGED_END, DEFAULT_LAUNCHER_MCP_STARTUP_TIMEOUT_SEC, RETIRED_TEAM_MCP_PATH_PATTERN;
+var import_fs35, import_os10, import_path47, MANAGED_START, MANAGED_END, DEFAULT_LAUNCHER_MCP_STARTUP_TIMEOUT_SEC, CODEX_MCP_SERVER_NAME_PATTERN, RETIRED_TEAM_MCP_PATH_PATTERN;
 var init_mcp_registry = __esm({
   "src/installer/mcp-registry.ts"() {
     "use strict";
@@ -8879,6 +8879,7 @@ var init_mcp_registry = __esm({
     MANAGED_START = "# BEGIN OMC MANAGED MCP REGISTRY";
     MANAGED_END = "# END OMC MANAGED MCP REGISTRY";
     DEFAULT_LAUNCHER_MCP_STARTUP_TIMEOUT_SEC = 15;
+    CODEX_MCP_SERVER_NAME_PATTERN = /^[A-Za-z0-9_-]+$/;
     RETIRED_TEAM_MCP_PATH_PATTERN = /(^|[\\/])bridge[\\/]+team-mcp\.cjs$/i;
   }
 });
@@ -12336,11 +12337,6 @@ function commandExists2(command, env2) {
   });
   return result.status === 0;
 }
-function isClaudeSession(env2) {
-  return Boolean(
-    env2.CLAUDECODE?.trim() || env2.CLAUDE_SESSION_ID?.trim() || env2.CLAUDECODE_SESSION_ID?.trim()
-  );
-}
 function resolveOmcCliPrefix(options = {}) {
   const env2 = options.env ?? process.env;
   const omcAvailable = options.omcAvailable ?? commandExists2(OMC_CLI_BINARY, env2);
@@ -12354,11 +12350,7 @@ function resolveOmcCliPrefix(options = {}) {
   return OMC_CLI_BINARY;
 }
 function resolveInvocationPrefix(commandSuffix, options = {}) {
-  const env2 = options.env ?? process.env;
-  const normalizedSuffix = commandSuffix.trim();
-  if (/^ask(?:\s|$)/.test(normalizedSuffix) && isClaudeSession(env2)) {
-    return OMC_CLI_BINARY;
-  }
+  void commandSuffix;
   return resolveOmcCliPrefix(options);
 }
 function formatOmcCliInvocation(commandSuffix, options = {}) {
@@ -82117,7 +82109,8 @@ var DEFAULT_CONFIG5 = {
   verbose: false,
   stateFilePath: getGlobalOmcStatePath("rate-limit-daemon.json"),
   pidFilePath: getGlobalOmcStatePath("rate-limit-daemon.pid"),
-  logFilePath: getGlobalOmcStatePath("rate-limit-daemon.log")
+  logFilePath: getGlobalOmcStatePath("rate-limit-daemon.log"),
+  claudeConfigDir: ""
 };
 var MAX_LOG_SIZE_BYTES2 = 1 * 1024 * 1024;
 var SECURE_FILE_MODE3 = 384;
@@ -82437,7 +82430,8 @@ function startDaemon(config2) {
   try {
     const daemonEnv = {
       ...createMinimalDaemonEnv2(),
-      OMC_DAEMON_CONFIG_FILE: configPath
+      OMC_DAEMON_CONFIG_FILE: configPath,
+      ...cfg.claudeConfigDir ? { CLAUDE_CONFIG_DIR: cfg.claudeConfigDir } : process.env.CLAUDE_CONFIG_DIR ? { CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR } : {}
     };
     const child = (0, import_child_process27.spawn)("node", ["-e", daemonScript], {
       detached: true,
